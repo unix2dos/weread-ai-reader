@@ -14,9 +14,9 @@
 
 <img src="docs/images/toolbar-popup.png" alt="工具栏 popup" width="328">
 
-<img src="docs/images/summary-window.png" alt="独立摘要窗口" width="420">
+<img src="docs/images/summary-window.png" alt="独立摘要窗口" width="900">
 
-<img src="docs/images/options-page.png" alt="扩展设置页" width="720">
+<img src="docs/images/options-page.png" alt="扩展设置页" width="900">
 
 ## 架构
 
