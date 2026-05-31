@@ -20,6 +20,11 @@
   const MAX_CANVAS_TEXT_ITEMS = 12000;
   const CANVAS_BATCH_EVENT = '__wereadAiCanvasTextBatch';
   const CANVAS_REQUEST_EVENT = '__wereadAiRequestCanvasText';
+  const PANEL_PREFS_STORAGE_KEY = 'wereadAiPanelPrefs';
+  const DEFAULT_PANEL_PREFS = Object.freeze({
+    translucent: true,
+    pinned: true
+  });
 
   function log(level, message, data) {
     const prefix = '[WeRead AI]';
@@ -33,16 +38,23 @@
   function createPanel() {
     const panel = document.createElement('div');
     panel.id = 'weread-ai-panel';
+    panel.className = 'translucent pinned';
     panel.innerHTML = `
       <div class="wap-header">
         <span class="wap-title">WeRead AI</span>
         <button class="wap-collapsed-title" type="button" title="展开 WeRead AI" aria-label="展开 WeRead AI">AI</button>
         <div class="wap-controls">
-          <button class="wap-btn wap-analyze" title="重新生成本章阅读判断">
+          <button class="wap-btn wap-analyze" type="button" title="重新生成本章阅读判断">
             <span class="wap-refresh-icon" aria-hidden="true">↻</span>
             <span>本章判断</span>
           </button>
-          <button class="wap-btn wap-toggle" title="最小化">-</button>
+          <button class="wap-btn wap-opacity is-active" type="button" title="切换为实体面板" aria-label="透明面板" aria-pressed="true">
+            <span aria-hidden="true">◐</span>
+          </button>
+          <button class="wap-btn wap-pin is-active" type="button" title="取消固定" aria-label="固定在网页上方" aria-pressed="true">
+            <span aria-hidden="true">⌖</span>
+          </button>
+          <button class="wap-btn wap-toggle" type="button" title="最小化">-</button>
         </div>
       </div>
       <div class="wap-body">
@@ -68,6 +80,7 @@
     document.body.appendChild(panel);
 
     installPanelToggle(panel);
+    installPanelDisplayControls(panel);
 
     panel.querySelector('.wap-analyze').addEventListener('click', () => {
       currentSnapshotId = '';
@@ -82,6 +95,88 @@
     installKeyboardShortcuts(panel);
     makeDraggable(panel, panel.querySelector('.wap-header'));
     log('log', '面板已创建');
+  }
+
+  function installPanelDisplayControls(panel) {
+    const opacityButton = panel.querySelector('.wap-opacity');
+    const pinButton = panel.querySelector('.wap-pin');
+
+    opacityButton.addEventListener('click', () => {
+      setPanelTranslucent(panel, !panel.classList.contains('translucent'));
+    });
+
+    pinButton.addEventListener('click', () => {
+      setPanelPinned(panel, !panel.classList.contains('pinned'));
+    });
+
+    loadPanelPreferences()
+      .then((prefs) => applyPanelPreferences(panel, prefs))
+      .catch((err) => log('warn', '读取面板偏好失败', { message: err.message }));
+  }
+
+  function applyPanelPreferences(panel, prefs) {
+    const normalized = normalizePanelPreferences(prefs);
+    setPanelTranslucent(panel, normalized.translucent, { skipSave: true });
+    setPanelPinned(panel, normalized.pinned, { skipSave: true });
+  }
+
+  function setPanelTranslucent(panel, translucent, options = {}) {
+    const button = panel.querySelector('.wap-opacity');
+    panel.classList.toggle('translucent', translucent);
+    button.classList.toggle('is-active', translucent);
+    button.setAttribute('aria-pressed', String(translucent));
+    button.title = translucent ? '切换为实体面板' : '切换为透明面板';
+    button.setAttribute('aria-label', translucent ? '透明面板' : '实体面板');
+    if (!options.skipSave) savePanelPreferences(panel);
+  }
+
+  function setPanelPinned(panel, pinned, options = {}) {
+    const button = panel.querySelector('.wap-pin');
+    const rect = panel.getBoundingClientRect();
+    const wasPinned = panel.classList.contains('pinned');
+
+    panel.classList.toggle('pinned', pinned);
+    panel.classList.toggle('unpinned', !pinned);
+    button.classList.toggle('is-active', pinned);
+    button.setAttribute('aria-pressed', String(pinned));
+    button.title = pinned ? '取消固定' : '固定在网页上方';
+    button.setAttribute('aria-label', pinned ? '固定在网页上方' : '未固定');
+
+    if (panel.isConnected && wasPinned !== pinned) {
+      const left = pinned ? rect.left : rect.left + window.scrollX;
+      const top = pinned ? rect.top : rect.top + window.scrollY;
+      panel.style.left = `${Math.max(8, Math.round(left))}px`;
+      panel.style.top = `${Math.max(8, Math.round(top))}px`;
+      panel.style.right = 'auto';
+    }
+
+    if (!options.skipSave) savePanelPreferences(panel);
+  }
+
+  function loadPanelPreferences() {
+    if (typeof chrome === 'undefined' || !chrome.storage?.local) {
+      return Promise.resolve(DEFAULT_PANEL_PREFS);
+    }
+
+    return chrome.storage.local.get([PANEL_PREFS_STORAGE_KEY])
+      .then((result) => normalizePanelPreferences(result[PANEL_PREFS_STORAGE_KEY]));
+  }
+
+  function savePanelPreferences(panel) {
+    if (typeof chrome === 'undefined' || !chrome.storage?.local) return;
+    chrome.storage.local.set({
+      [PANEL_PREFS_STORAGE_KEY]: {
+        translucent: panel.classList.contains('translucent'),
+        pinned: panel.classList.contains('pinned')
+      }
+    }).catch((err) => log('warn', '保存面板偏好失败', { message: err.message }));
+  }
+
+  function normalizePanelPreferences(prefs) {
+    return {
+      ...DEFAULT_PANEL_PREFS,
+      ...(prefs || {})
+    };
   }
 
   function installPanelToggle(panel) {
@@ -153,9 +248,7 @@
       if (Math.abs(deltaX) + Math.abs(deltaY) > 3) {
         hasMoved = true;
       }
-      el.style.left = (origX + deltaX) + 'px';
-      el.style.top = (origY + deltaY) + 'px';
-      el.style.right = 'auto';
+      setPanelViewportPosition(el, origX + deltaX, origY + deltaY);
     });
     document.addEventListener('mouseup', () => {
       if (!isDragging) return;
@@ -166,6 +259,19 @@
         delete el.dataset.dragJustEnded;
       }, 150);
     });
+  }
+
+  function setPanelViewportPosition(el, viewportLeft, viewportTop) {
+    const left = Math.max(8, Math.round(viewportLeft));
+    const top = Math.max(8, Math.round(viewportTop));
+    if (el.classList.contains('unpinned')) {
+      el.style.left = `${left + window.scrollX}px`;
+      el.style.top = `${top + window.scrollY}px`;
+    } else {
+      el.style.left = `${left}px`;
+      el.style.top = `${top}px`;
+    }
+    el.style.right = 'auto';
   }
 
   function updateStatus(type, text) {

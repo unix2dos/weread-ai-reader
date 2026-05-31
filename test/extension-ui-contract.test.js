@@ -64,6 +64,29 @@ test('chapter judgement action uses a refresh icon and current-chapter wording',
   assert.doesNotMatch(contentJs, />重新判断</);
 });
 
+test('panel exposes opacity and pin controls with transparent pinned defaults', () => {
+  assert.match(contentJs, /PANEL_PREFS_STORAGE_KEY = 'wereadAiPanelPrefs'/);
+  assert.match(contentJs, /translucent:\s*true/);
+  assert.match(contentJs, /pinned:\s*true/);
+  assert.match(contentJs, /class="wap-btn wap-opacity is-active"/);
+  assert.match(contentJs, /class="wap-btn wap-pin is-active"/);
+});
+
+test('transparent panel keeps text readable by using alpha backgrounds instead of global opacity', () => {
+  assert.match(contentCss, /#weread-ai-panel\.translucent\s*\{[^}]*background:\s*rgba\(255,\s*255,\s*255,\s*0\.72\)/s);
+  assert.match(contentCss, /#weread-ai-panel\.translucent:hover,\s*#weread-ai-panel\.translucent:focus-within\s*\{[^}]*background:\s*rgba\(255,\s*255,\s*255,\s*0\.92\)/s);
+  assert.doesNotMatch(contentCss, /#weread-ai-panel(?:\.translucent)?\s*\{[^}]*opacity:/s);
+});
+
+test('pin toggle keeps pinned mode fixed and converts unpinned mode to document coordinates', () => {
+  assert.match(contentJs, /function setPanelPinned\(panel, pinned, options = \{\}\)/);
+  assert.match(contentJs, /panel\.classList\.toggle\('pinned', pinned\)/);
+  assert.match(contentJs, /panel\.classList\.toggle\('unpinned', !pinned\)/);
+  assert.match(contentJs, /rect\.top \+ window\.scrollY/);
+  assert.match(contentCss, /#weread-ai-panel\.pinned\s*\{[^}]*position:\s*fixed/s);
+  assert.match(contentCss, /#weread-ai-panel\.unpinned\s*\{[^}]*position:\s*absolute/s);
+});
+
 test('option q toggles the panel without rerunning judgement', () => {
   assert.match(contentJs, /function installKeyboardShortcuts\(panel\)/);
   assert.match(contentJs, /event\.altKey && event\.code === 'KeyQ'/);
