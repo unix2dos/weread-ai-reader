@@ -14,9 +14,9 @@
     updatedAt: ''
   });
   const SCORE_WEIGHTS = Object.freeze({
-    informationDensity: 0.35,
+    contentGain: 0.35,
     structuralImportance: 0.4,
-    skipRisk: 0.25
+    deepReadNecessity: 0.25
   });
 
   let currentState = { ...DEFAULT_STATE };
@@ -266,9 +266,9 @@
 
   function renderScoreDimensions(score) {
     const dimensions = [
-      ['信息密度', score.informationDensity],
+      ['内容增量', score.contentGain],
       ['结构关键', score.structuralImportance],
-      ['跳读风险', score.skipRisk]
+      ['精读必要', score.deepReadNecessity]
     ].filter(([, value]) => hasNumericScore(value));
 
     if (!dimensions.length) return '';
@@ -435,12 +435,13 @@
   function normalizeMasteryScore(value) {
     if (!value || typeof value !== 'object') return null;
     const score = {
-      informationDensity: clampScore(value.informationDensity),
+      contentGain: clampScore(readScoreDimension(value, 'contentGain', 'informationDensity')),
       structuralImportance: clampScore(value.structuralImportance),
-      skipRisk: clampScore(value.skipRisk)
+      deepReadNecessity: clampScore(readScoreDimension(value, 'deepReadNecessity', 'skipRisk'))
     };
-    const hasDimensions = ['informationDensity', 'structuralImportance', 'skipRisk']
-      .every((key) => hasNumericScore(value[key]));
+    const hasDimensions = hasNumericScore(readScoreDimension(value, 'contentGain', 'informationDensity'))
+      && hasNumericScore(value.structuralImportance)
+      && hasNumericScore(readScoreDimension(value, 'deepReadNecessity', 'skipRisk'));
     if (!hasDimensions && !hasNumericScore(value.overall)) return null;
 
     return {
@@ -451,10 +452,16 @@
 
   function calculateMasteryScore(score) {
     return clampScore(
-      (score.informationDensity * SCORE_WEIGHTS.informationDensity)
+      (score.contentGain * SCORE_WEIGHTS.contentGain)
       + (score.structuralImportance * SCORE_WEIGHTS.structuralImportance)
-      + (score.skipRisk * SCORE_WEIGHTS.skipRisk)
+      + (score.deepReadNecessity * SCORE_WEIGHTS.deepReadNecessity)
     );
+  }
+
+  function readScoreDimension(score, field, legacyField) {
+    if (!score || typeof score !== 'object') return undefined;
+    if (hasNumericScore(score[field])) return score[field];
+    return legacyField ? score[legacyField] : undefined;
   }
 
   function clampScore(value) {
@@ -470,6 +477,7 @@
   }
 
   function labelRecommendation(value) {
+    if (value === 'must_deep_read') return '必须精读';
     if (value === 'deep_read') return '值得精读';
     if (value === 'skip_read') return '可跳读';
     return '可快读';

@@ -125,9 +125,12 @@ test('summary score shows derived overall and dimensions', () => {
 
   assert.match(renderScoreSource[1], /renderScoreDimensions\(score\)/);
   assert.match(summaryJs, /function renderScoreDimensions\(score\)/);
-  assert.match(summaryJs, /信息密度/);
+  assert.match(summaryJs, /内容增量/);
   assert.match(summaryJs, /结构关键/);
-  assert.match(summaryJs, /跳读风险/);
+  assert.match(summaryJs, /精读必要/);
+  assert.doesNotMatch(summaryJs, /跳读风险/);
+  assert.match(summaryJs, /must_deep_read/);
+  assert.match(summaryJs, /必须精读/);
   assert.match(summaryCss, /\.summary-score-dimensions/);
   assert.match(summaryCss, /\.summary-score-dimension/);
 });

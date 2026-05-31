@@ -262,7 +262,7 @@ function buildFailedResult({
 function scoreReadingJudgement(judgement) {
   const questions = judgement.questionsForAuthor || [];
   const checks = {
-    hasRecommendation: ['deep_read', 'quick_read', 'skip_read'].includes(judgement.recommendation),
+    hasRecommendation: ['must_deep_read', 'deep_read', 'quick_read', 'skip_read'].includes(judgement.recommendation),
     hasCompleteScores: hasCompleteScores(judgement.masteryScore),
     nextMustKnowActionable: hasActionableItems(judgement.nextMustKnow, { min: 1, max: 4 }),
     reasonsEvidenceBased: hasActionableItems(judgement.reasons, { min: 2, max: 3 }),
@@ -428,8 +428,16 @@ function parseJson(raw) {
 }
 
 function hasCompleteScores(score) {
-  return ['overall', 'informationDensity', 'structuralImportance', 'skipRisk']
-    .every((key) => Number.isFinite(Number(score && score[key])));
+  return Number.isFinite(Number(score && score.overall))
+    && hasScoreDimension(score, 'contentGain', 'informationDensity')
+    && hasScoreDimension(score, 'structuralImportance')
+    && hasScoreDimension(score, 'deepReadNecessity', 'skipRisk');
+}
+
+function hasScoreDimension(score, field, legacyField) {
+  if (!score || typeof score !== 'object') return false;
+  return Number.isFinite(Number(score[field]))
+    || Boolean(legacyField && Number.isFinite(Number(score[legacyField])));
 }
 
 function hasActionableItems(items, { min, max }) {

@@ -52,9 +52,9 @@ function completeReadingJudgement(overrides = {}) {
     recommendation: 'quick_read',
     masteryScore: {
       overall: 58,
-      informationDensity: 45,
+      contentGain: 45,
       structuralImportance: 50,
-      skipRisk: 70
+      deepReadNecessity: 70
     },
     nextMustKnow: ['理解本章的过渡作用'],
     reasons: ['当前可见正文更像承接段。'],
@@ -84,7 +84,7 @@ test('buildStrategyInput includes mastery score and author-question output requi
     publicSignals: signalPanel.publicSignals,
     personalSignals: signalPanel.personalSignals
   });
-  assert.equal(input.outputShape.recommendation, 'deep_read | quick_read | skip_read');
+  assert.equal(input.outputShape.recommendation, 'must_deep_read | deep_read | quick_read | skip_read');
   assert.equal(input.scoreRubric.masteryScoreOverall, '服务端按固定权重从三个维度派生，模型输出的 overall 会被忽略');
   assert.deepEqual(input.scoreRubric.weights, MASTERY_SCORE_WEIGHTS);
   assert.deepEqual(input.scoreRubric.thresholds, {
@@ -94,9 +94,11 @@ test('buildStrategyInput includes mastery score and author-question output requi
     skipRead: '0-64 可跳读或只扫结论'
   });
   assert.equal(input.outputShape.masteryScore.overall, undefined);
-  assert.equal(input.outputShape.masteryScore.informationDensity, '0-100 信息密度分');
+  assert.equal(input.outputShape.masteryScore.contentGain, '0-100 内容增量分');
   assert.equal(input.outputShape.masteryScore.structuralImportance, '0-100 结构关键性分');
-  assert.equal(input.outputShape.masteryScore.skipRisk, '0-100 可跳读风险分');
+  assert.equal(input.outputShape.masteryScore.deepReadNecessity, '0-100 精读必要性分');
+  assert.equal(input.outputShape.masteryScore.informationDensity, undefined);
+  assert.equal(input.outputShape.masteryScore.skipRisk, undefined);
   assert.equal(input.outputShape.nextMustKnow[0], '1-3 条接下来最需要掌握的概念、区分或结构');
   assert.equal(input.outputShape.reasons[0], '1-2 条只基于当前章节与信号的判断依据');
   assert.equal(input.outputShape.keyPassages[0], '1-3 条热门划线或已采集正文片段；公开划线不足时使用当前可见正文片段');
@@ -132,8 +134,11 @@ test('buildMessages includes required system prompt constraints', () => {
   assert.match(systemPrompt, /65-79/);
   assert.match(systemPrompt, /首屏/);
   assert.match(systemPrompt, /一句明确阅读动作/);
+  assert.match(systemPrompt, /内容增量/);
+  assert.match(systemPrompt, /精读必要性/);
+  assert.match(systemPrompt, /可快读.*不能写成“必须精读”/);
   assert.match(systemPrompt, /必须只输出 JSON/);
-  assert.match(systemPrompt, /recommendation 只能是 deep_read、quick_read 或 skip_read/);
+  assert.match(systemPrompt, /recommendation 只能是 must_deep_read、deep_read、quick_read 或 skip_read/);
   assert.match(systemPrompt, /优先使用公开阅读信号，其次参考书籍上下文，仅在存在个人信号时使用个人信号/);
 });
 
@@ -201,9 +206,9 @@ test('parseReadingJudgement normalizes score ranges and arrays', () => {
     recommendation: 'deep_read',
     masteryScore: {
       overall: 120,
-      informationDensity: 91,
+      contentGain: 91,
       structuralImportance: 80,
-      skipRisk: -5
+      deepReadNecessity: -5
     },
     nextMustKnow: ['核心概念', '后文章节会复用的区分'],
     reasons: ['热门划线集中在定义段。'],
@@ -216,9 +221,9 @@ test('parseReadingJudgement normalizes score ranges and arrays', () => {
   assert.equal(judgement.recommendation, 'skip_read');
   assert.deepEqual(judgement.masteryScore, {
     overall: 64,
-    informationDensity: 91,
+    contentGain: 91,
     structuralImportance: 80,
-    skipRisk: 0
+    deepReadNecessity: 0
   });
   assert.deepEqual(judgement.questionsForAuthor, ['作者为什么先定义这个概念？']);
   assert.equal(judgement.readingAdvice, '先精读定义段，再快读例子。');
@@ -226,18 +231,18 @@ test('parseReadingJudgement normalizes score ranges and arrays', () => {
 
 test('parseReadingJudgement derives overall score from weighted dimensions', () => {
   assert.equal(calculateMasteryScore({
-    informationDensity: 80,
+    contentGain: 80,
     structuralImportance: 90,
-    skipRisk: 70
+    deepReadNecessity: 70
   }), 82);
 
   const judgement = parseReadingJudgement(JSON.stringify(completeReadingJudgement({
     recommendation: 'quick_read',
     masteryScore: {
       overall: 99,
-      informationDensity: 80,
+      contentGain: 80,
       structuralImportance: 90,
-      skipRisk: 70
+      deepReadNecessity: 70
     }
   })));
 
@@ -245,19 +250,64 @@ test('parseReadingJudgement derives overall score from weighted dimensions', () 
   assert.equal(judgement.recommendation, 'deep_read');
 });
 
-test('parseReadingJudgement enforces strict recommendation thresholds', () => {
+test('parseReadingJudgement enforces strict four-level recommendation thresholds', () => {
+  const mustRead = parseReadingJudgement(JSON.stringify(completeReadingJudgement({
+    recommendation: 'quick_read',
+    masteryScore: {
+      overall: 10,
+      contentGain: 95,
+      structuralImportance: 95,
+      deepReadNecessity: 90
+    }
+  })));
+
+  assert.equal(mustRead.masteryScore.overall, 94);
+  assert.equal(mustRead.recommendation, 'must_deep_read');
+
   const judgement = parseReadingJudgement(JSON.stringify(completeReadingJudgement({
     recommendation: 'deep_read',
     masteryScore: {
       overall: 95,
-      informationDensity: 70,
+      contentGain: 70,
       structuralImportance: 70,
-      skipRisk: 80
+      deepReadNecessity: 80
     }
   })));
 
   assert.equal(judgement.masteryScore.overall, 73);
   assert.equal(judgement.recommendation, 'quick_read');
+});
+
+test('parseReadingJudgement removes must-read wording from quick-read advice', () => {
+  const judgement = parseReadingJudgement(JSON.stringify(completeReadingJudgement({
+    recommendation: 'deep_read',
+    masteryScore: {
+      contentGain: 70,
+      structuralImportance: 70,
+      deepReadNecessity: 80
+    },
+    readingAdvice: '必须精读消费主义链条，其余快读。'
+  })));
+
+  assert.equal(judgement.recommendation, 'quick_read');
+  assert.equal(judgement.readingAdvice, '局部精读消费主义链条，其余快读。');
+});
+
+test('parseReadingJudgement accepts legacy score dimensions and emits new dimension names', () => {
+  const judgement = parseReadingJudgement(JSON.stringify(completeReadingJudgement({
+    masteryScore: {
+      informationDensity: 80,
+      structuralImportance: 90,
+      skipRisk: 70
+    }
+  })));
+
+  assert.deepEqual(judgement.masteryScore, {
+    overall: 82,
+    contentGain: 80,
+    structuralImportance: 90,
+    deepReadNecessity: 70
+  });
 });
 
 test('parseReadingJudgement limits list fields', () => {
@@ -303,9 +353,9 @@ test('parseReadingJudgement rejects invalid model output', () => {
 test('parseReadingJudgement accepts legacy conclusion labels as new recommendations', () => {
   const highScores = {
     overall: 10,
-    informationDensity: 88,
+    contentGain: 88,
     structuralImportance: 90,
-    skipRisk: 82
+    deepReadNecessity: 82
   };
   assert.equal(parseReadingJudgement(JSON.stringify(completeReadingJudgement({
     recommendation: 'worth_deep_read',
@@ -326,6 +376,10 @@ test('toLegacyJudgement maps new recommendation to existing conclusion labels', 
     readingAdvice: '阅读建议'
   };
 
+  assert.equal(toLegacyJudgement({
+    ...judgement,
+    recommendation: 'must_deep_read'
+  }).conclusion, 'worth_deep_read');
   assert.deepEqual(toLegacyJudgement({
     ...judgement,
     recommendation: 'deep_read'

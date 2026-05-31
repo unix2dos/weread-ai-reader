@@ -192,8 +192,10 @@ test('returns snapshot id and structured signal panel for a valid reading snapsh
     assert.equal(body.agentRequest.body.model, 'deepseek-v4-flash');
     const requestContent = JSON.parse(body.agentRequest.body.messages[1].content);
     assert.equal(requestContent.promptVersion, 'reading-strategy-v2');
-    assert.equal(requestContent.outputShape.recommendation, 'deep_read | quick_read | skip_read');
+    assert.equal(requestContent.outputShape.recommendation, 'must_deep_read | deep_read | quick_read | skip_read');
     assert.equal(requestContent.outputShape.masteryScore.overall, undefined);
+    assert.equal(requestContent.outputShape.masteryScore.contentGain, '0-100 内容增量分');
+    assert.equal(requestContent.outputShape.masteryScore.deepReadNecessity, '0-100 精读必要性分');
     assert.equal(requestContent.scoreRubric.masteryScoreOverall, '服务端按固定权重从三个维度派生，模型输出的 overall 会被忽略');
     assert.equal(requestContent.scoreRubric.weights.structuralImportance, 0.4);
     assert.equal(requestContent.outputShape.questionsForAuthor[0], '1-2 个带着阅读的问题，只给问题，不要给答案');
