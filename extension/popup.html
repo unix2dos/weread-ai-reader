@@ -1,59 +1,109 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <style>
-    body {
-      width: 280px;
-      padding: 16px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      font-size: 13px;
-    }
-    .header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 12px;
-    }
-    .header h2 {
-      margin: 0;
-      font-size: 16px;
-    }
-    .status {
-      padding: 8px 12px;
-      border-radius: 6px;
-      margin-bottom: 12px;
-      font-size: 12px;
-    }
-    .status.ready { background: #d4edda; color: #155724; }
-    .status.warning { background: #fff3cd; color: #856404; }
-    .btn {
-      width: 100%;
-      padding: 8px;
-      margin-bottom: 8px;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 13px;
-    }
-    .btn-primary {
-      background: #007AFF;
-      color: white;
-    }
-    .btn-secondary {
-      background: #f0f0f0;
-      color: #333;
-    }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <h2>WeRead AI</h2>
-  </div>
-  <div class="status" id="status">检查配置中...</div>
-  <button class="btn btn-primary" id="open-settings">打开设置</button>
-  <button class="btn btn-secondary" id="clear-cache">清除缓存</button>
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <style>
+      body {
+        width: 300px;
+        margin: 0;
+        padding: 14px;
+        color: #1f2933;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 13px;
+      }
 
-  <script src="popup.js"></script>
-</body>
+      .header {
+        margin-bottom: 12px;
+      }
+
+      .header h2 {
+        margin: 0 0 4px;
+        font-size: 18px;
+        letter-spacing: 0;
+      }
+
+      .context {
+        min-height: 18px;
+        color: #667085;
+        line-height: 1.4;
+      }
+
+      .status {
+        padding: 8px 10px;
+        border-radius: 6px;
+        margin-bottom: 10px;
+        background: #eef3f8;
+        color: #1769aa;
+        line-height: 1.4;
+      }
+
+      .status.success {
+        background: #e7f6ed;
+        color: #1f7a4d;
+      }
+
+      .status.waiting {
+        background: #fff7df;
+        color: #946200;
+      }
+
+      .status.error,
+      .status.warning {
+        background: #fff0ee;
+        color: #b42318;
+      }
+
+      .btn {
+        width: 100%;
+        min-height: 34px;
+        padding: 8px 10px;
+        margin-bottom: 8px;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        cursor: pointer;
+        font: inherit;
+      }
+
+      .btn-primary {
+        background: #007aff;
+        color: white;
+        font-weight: 700;
+      }
+
+      .btn-secondary {
+        background: #edf5ff;
+        border-color: #cfe2ff;
+        color: #1769aa;
+      }
+
+      .btn-muted {
+        background: #f2f4f7;
+        color: #475467;
+      }
+
+      .divider {
+        height: 1px;
+        margin: 4px 0 10px;
+        background: #e1e7ee;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h2>WeRead AI</h2>
+      <div id="popup-context" class="context">等待阅读现场...</div>
+    </div>
+
+    <div class="status waiting" id="popup-status">检查配置中...</div>
+
+    <button class="btn btn-primary" id="analyze-chapter" type="button">本章判断</button>
+    <button class="btn btn-secondary" id="open-summary" type="button">打开摘要窗口</button>
+
+    <div class="divider"></div>
+
+    <button class="btn btn-muted" id="open-settings" type="button">打开设置</button>
+    <button class="btn btn-muted" id="clear-cache" type="button">清除缓存</button>
+
+    <script src="popup.js"></script>
+  </body>
 </html>

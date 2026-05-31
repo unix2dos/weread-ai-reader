@@ -188,7 +188,7 @@ function buildRepairRequestBody({
     model,
     stream: true,
     temperature: 0,
-    max_tokens: 1200,
+    max_tokens: 900,
     response_format: { type: 'json_object' },
     messages: [
       {
@@ -198,6 +198,8 @@ function buildRepairRequestBody({
           '保留原判断含义，不要改写为 Markdown，不要添加解释文字。',
           '必须补齐所有必填字段，尤其是 readerPerspective；如果评论信号不足，readerPerspective 写“暂无足够公开评论信号，暂以正文和划线信号判断”。',
           'questionsForAuthor 只保留问题，不要给答案。',
+          '按二八原则修复：nextMustKnow 最多 3 条，reasons 最多 2 条，keyPassages 最多 3 条，questionsForAuthor 最多 2 个。',
+          'readingAdvice 必须是一句明确阅读动作，60字内。',
           '必须只输出完整 JSON 对象。'
         ].join('\n')
       },

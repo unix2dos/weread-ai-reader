@@ -194,7 +194,7 @@ test('returns snapshot id and structured signal panel for a valid reading snapsh
     assert.equal(requestContent.promptVersion, 'reading-strategy-v2');
     assert.equal(requestContent.outputShape.recommendation, 'deep_read | quick_read | skip_read');
     assert.equal(requestContent.outputShape.masteryScore.overall, '0-100 掌握价值分');
-    assert.equal(requestContent.outputShape.questionsForAuthor[0], '带着阅读的问题，不要给答案');
+    assert.equal(requestContent.outputShape.questionsForAuthor[0], '1-2 个带着阅读的问题，只给问题，不要给答案');
     assert.match(body.agentRequest.body.messages[1].content, /这一章讨论了如何判断一章是否值得精读/);
     assert.doesNotMatch(JSON.stringify(body.agentRequest), /test-key|dev-token/);
     assert.equal(body.signalPanel.bestBookmarks[0].markText, '值得精读的关键段落');

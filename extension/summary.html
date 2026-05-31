@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>WeRead AI 摘要</title>
+    <link rel="stylesheet" href="styles/summary.css">
+  </head>
+  <body>
+    <main class="summary-shell">
+      <header class="summary-header">
+        <div>
+          <div class="summary-title">WeRead AI</div>
+          <div id="summary-context" class="summary-context">等待阅读现场...</div>
+        </div>
+        <div class="summary-header-actions">
+          <button id="summary-analyze" class="summary-action-button" type="button">本章判断</button>
+          <div id="summary-status" class="summary-status waiting">等待</div>
+        </div>
+      </header>
+
+      <section id="summary-judgement" class="summary-judgement">
+        <div class="summary-empty">还没有本章判断</div>
+      </section>
+
+      <section id="summary-evidence" class="summary-evidence-host"></section>
+    </main>
+    <script src="summary.js"></script>
+  </body>
+</html>

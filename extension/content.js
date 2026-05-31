@@ -6,25 +6,22 @@
   let currentChapterText = '';
   let extractionCount = 0;
   let isExtracting = false;
-  let currentSnapshotId = '';
   let judgementPort = null;
   let canvasTextItems = [];
   let lastCanvasSummary = null;
-  let lastFullRequestText = '';
   let lastSignalPanel = null;
   let chapterCapture = null;
   let lastCaptureMode = 'active-visible';
   let lastCaptureStats = {};
   let lastExpectedChapterWordCount = 0;
+  let latestSummaryState = {
+    status: { type: 'waiting', text: '等待章节加载...' },
+    streamText: ''
+  };
 
   const MAX_CANVAS_TEXT_ITEMS = 12000;
   const CANVAS_BATCH_EVENT = '__wereadAiCanvasTextBatch';
   const CANVAS_REQUEST_EVENT = '__wereadAiRequestCanvasText';
-  const PANEL_PREFS_STORAGE_KEY = 'wereadAiPanelPrefs';
-  const DEFAULT_PANEL_PREFS = Object.freeze({
-    translucent: true,
-    pinned: true
-  });
 
   function log(level, message, data) {
     const prefix = '[WeRead AI]';
@@ -35,250 +32,67 @@
     }
   }
 
-  function createPanel() {
-    const panel = document.createElement('div');
-    panel.id = 'weread-ai-panel';
-    panel.className = 'translucent pinned';
-    panel.innerHTML = `
-      <div class="wap-header">
-        <span class="wap-title">WeRead AI</span>
-        <button class="wap-collapsed-title" type="button" title="展开 WeRead AI" aria-label="展开 WeRead AI">AI</button>
-        <div class="wap-controls">
-          <button class="wap-btn wap-analyze" type="button" title="重新生成本章阅读判断">
-            <span class="wap-refresh-icon" aria-hidden="true">↻</span>
-            <span>本章判断</span>
-          </button>
-          <button class="wap-btn wap-opacity is-active" type="button" title="切换为实体面板" aria-label="透明面板" aria-pressed="true">
-            <span aria-hidden="true">◐</span>
-          </button>
-          <button class="wap-btn wap-pin is-active" type="button" title="取消固定" aria-label="固定在网页上方" aria-pressed="true">
-            <span aria-hidden="true">⌖</span>
-          </button>
-          <button class="wap-btn wap-toggle" type="button" title="最小化">-</button>
-        </div>
-      </div>
-      <div class="wap-body">
-        <div class="wap-status">等待章节加载...</div>
-        <div class="wap-judgement"></div>
-        <div class="wap-signal-panel"></div>
-        <details class="wap-debug">
-          <summary>调试</summary>
-          <div class="wap-debug-actions">
-            <button class="wap-debug-copy" type="button" disabled>复制完整请求</button>
-            <span class="wap-debug-copy-status"></span>
-          </div>
-          <div class="wap-debug-label">摘要</div>
-          <pre class="wap-debug-content">暂无请求</pre>
-          <details class="wap-full-request">
-            <summary>完整请求</summary>
-            <pre class="wap-full-request-content">暂无完整请求</pre>
-          </details>
-        </details>
-      </div>
-    `;
-
-    document.body.appendChild(panel);
-
-    installPanelToggle(panel);
-    installPanelDisplayControls(panel);
-
-    panel.querySelector('.wap-analyze').addEventListener('click', () => {
-      currentSnapshotId = '';
-      currentChapterTitle = '';
-      currentChapterKey = '';
-      currentChapterText = '';
-      handleNewChapter({ force: true });
-    });
-
-    panel.querySelector('.wap-debug-copy').addEventListener('click', copyFullRequest);
-
-    installKeyboardShortcuts(panel);
-    makeDraggable(panel, panel.querySelector('.wap-header'));
-    log('log', '面板已创建');
-  }
-
-  function installPanelDisplayControls(panel) {
-    const opacityButton = panel.querySelector('.wap-opacity');
-    const pinButton = panel.querySelector('.wap-pin');
-
-    opacityButton.addEventListener('click', () => {
-      setPanelTranslucent(panel, !panel.classList.contains('translucent'));
-    });
-
-    pinButton.addEventListener('click', () => {
-      setPanelPinned(panel, !panel.classList.contains('pinned'));
-    });
-
-    loadPanelPreferences()
-      .then((prefs) => applyPanelPreferences(panel, prefs))
-      .catch((err) => log('warn', '读取面板偏好失败', { message: err.message }));
-  }
-
-  function applyPanelPreferences(panel, prefs) {
-    const normalized = normalizePanelPreferences(prefs);
-    setPanelTranslucent(panel, normalized.translucent, { skipSave: true });
-    setPanelPinned(panel, normalized.pinned, { skipSave: true });
-  }
-
-  function setPanelTranslucent(panel, translucent, options = {}) {
-    const button = panel.querySelector('.wap-opacity');
-    panel.classList.toggle('translucent', translucent);
-    button.classList.toggle('is-active', translucent);
-    button.setAttribute('aria-pressed', String(translucent));
-    button.title = translucent ? '切换为实体面板' : '切换为透明面板';
-    button.setAttribute('aria-label', translucent ? '透明面板' : '实体面板');
-    if (!options.skipSave) savePanelPreferences(panel);
-  }
-
-  function setPanelPinned(panel, pinned, options = {}) {
-    const button = panel.querySelector('.wap-pin');
-    const rect = panel.getBoundingClientRect();
-    const wasPinned = panel.classList.contains('pinned');
-
-    panel.classList.toggle('pinned', pinned);
-    panel.classList.toggle('unpinned', !pinned);
-    button.classList.toggle('is-active', pinned);
-    button.setAttribute('aria-pressed', String(pinned));
-    button.title = pinned ? '取消固定' : '固定在网页上方';
-    button.setAttribute('aria-label', pinned ? '固定在网页上方' : '未固定');
-
-    if (panel.isConnected && wasPinned !== pinned) {
-      const left = pinned ? rect.left : rect.left + window.scrollX;
-      const top = pinned ? rect.top : rect.top + window.scrollY;
-      panel.style.left = `${Math.max(8, Math.round(left))}px`;
-      panel.style.top = `${Math.max(8, Math.round(top))}px`;
-      panel.style.right = 'auto';
-    }
-
-    if (!options.skipSave) savePanelPreferences(panel);
-  }
-
-  function loadPanelPreferences() {
-    if (typeof chrome === 'undefined' || !chrome.storage?.local) {
-      return Promise.resolve(DEFAULT_PANEL_PREFS);
-    }
-
-    return chrome.storage.local.get([PANEL_PREFS_STORAGE_KEY])
-      .then((result) => normalizePanelPreferences(result[PANEL_PREFS_STORAGE_KEY]));
-  }
-
-  function savePanelPreferences(panel) {
-    if (typeof chrome === 'undefined' || !chrome.storage?.local) return;
-    chrome.storage.local.set({
-      [PANEL_PREFS_STORAGE_KEY]: {
-        translucent: panel.classList.contains('translucent'),
-        pinned: panel.classList.contains('pinned')
-      }
-    }).catch((err) => log('warn', '保存面板偏好失败', { message: err.message }));
-  }
-
-  function normalizePanelPreferences(prefs) {
-    return {
-      ...DEFAULT_PANEL_PREFS,
-      ...(prefs || {})
-    };
-  }
-
-  function installPanelToggle(panel) {
-    const toggleButton = panel.querySelector('.wap-toggle');
-    const collapsedTitle = panel.querySelector('.wap-collapsed-title');
-
-    toggleButton.addEventListener('click', () => togglePanel(panel));
-
-    collapsedTitle.addEventListener('click', () => {
-      if (panel.dataset.dragJustEnded === 'true') return;
-      expandPanel(panel);
+  function installRuntimeMessageHandlers() {
+    if (typeof chrome === 'undefined' || !chrome.runtime?.onMessage) return;
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (message.type !== 'REQUEST_CURRENT_CHAPTER_JUDGEMENT') return false;
+      requestCurrentChapterJudgement().then(
+        () => sendResponse({ ok: true }),
+        (err) => sendResponse({ ok: false, error: { message: err.message } })
+      );
+      return true;
     });
   }
 
-  function togglePanel(panel) {
-    if (panel.classList.contains('collapsed')) {
-      expandPanel(panel);
-    } else {
-      collapsePanel(panel);
-    }
+  async function requestCurrentChapterJudgement() {
+    currentChapterTitle = '';
+    currentChapterKey = '';
+    currentChapterText = '';
+    await handleNewChapter({ force: true });
   }
 
-  function collapsePanel(panel) {
-    const toggleButton = panel.querySelector('.wap-toggle');
-    panel.classList.add('collapsed');
-    toggleButton.textContent = '+';
-    toggleButton.title = '展开';
-    toggleButton.setAttribute('aria-label', '展开');
-  }
-
-  function expandPanel(panel) {
-    const toggleButton = panel.querySelector('.wap-toggle');
-    panel.classList.remove('collapsed');
-    toggleButton.textContent = '-';
-    toggleButton.title = '最小化';
-    toggleButton.setAttribute('aria-label', '最小化');
-  }
-
-  function installKeyboardShortcuts(panel) {
+  function installKeyboardShortcuts() {
     const handleShortcut = (event) => {
       if (!(event.altKey && event.code === 'KeyQ')) return;
       const target = event.target;
       const tagName = target?.tagName?.toLowerCase();
       if (tagName === 'input' || tagName === 'textarea' || target?.isContentEditable) return;
       event.preventDefault();
-      togglePanel(panel);
+      openSummaryWindow();
     };
 
     window.addEventListener('keydown', handleShortcut, true);
   }
 
-  function makeDraggable(el, handle) {
-    let isDragging = false, hasMoved = false, startX, startY, origX, origY;
-    handle.addEventListener('mousedown', (e) => {
-      if (e.target.closest('.wap-controls button')) return;
-      isDragging = true;
-      hasMoved = false;
-      startX = e.clientX;
-      startY = e.clientY;
-      const rect = el.getBoundingClientRect();
-      origX = rect.left;
-      origY = rect.top;
-      e.preventDefault();
-    });
-    document.addEventListener('mousemove', (e) => {
-      if (!isDragging) return;
-      const deltaX = e.clientX - startX;
-      const deltaY = e.clientY - startY;
-      if (Math.abs(deltaX) + Math.abs(deltaY) > 3) {
-        hasMoved = true;
-      }
-      setPanelViewportPosition(el, origX + deltaX, origY + deltaY);
-    });
-    document.addEventListener('mouseup', () => {
-      if (!isDragging) return;
-      isDragging = false;
-      if (!hasMoved) return;
-      el.dataset.dragJustEnded = 'true';
-      setTimeout(() => {
-        delete el.dataset.dragJustEnded;
-      }, 150);
+  function openSummaryWindow() {
+    if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) return;
+    chrome.runtime.sendMessage({ type: 'OPEN_SUMMARY_WINDOW' }).catch((err) => {
+      log('warn', '打开摘要窗口失败', { message: err.message });
     });
   }
 
-  function setPanelViewportPosition(el, viewportLeft, viewportTop) {
-    const left = Math.max(8, Math.round(viewportLeft));
-    const top = Math.max(8, Math.round(viewportTop));
-    if (el.classList.contains('unpinned')) {
-      el.style.left = `${left + window.scrollX}px`;
-      el.style.top = `${top + window.scrollY}px`;
-    } else {
-      el.style.left = `${left}px`;
-      el.style.top = `${top}px`;
-    }
-    el.style.right = 'auto';
+  function publishSummaryState(patch) {
+    latestSummaryState = {
+      ...latestSummaryState,
+      ...patch,
+      status: {
+        ...(latestSummaryState.status || {}),
+        ...(patch.status || {})
+      },
+      updatedAt: new Date().toISOString()
+    };
+
+    if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) return;
+    chrome.runtime.sendMessage({
+      type: 'UPDATE_SUMMARY_STATE',
+      patch: latestSummaryState
+    }).catch((err) => {
+      log('warn', '同步摘要状态失败', { message: err.message });
+    });
   }
 
   function updateStatus(type, text) {
-    const statusEl = document.querySelector('#weread-ai-panel .wap-status');
-    if (!statusEl) return;
-    statusEl.className = `wap-status ${type}`;
-    statusEl.textContent = text;
+    publishSummaryState({ status: { type, text } });
   }
 
   function formatChapterProgress(chapterTitle, message) {
@@ -286,201 +100,34 @@
   }
 
   function updateSignalPanel(signalPanel) {
-    const el = document.querySelector('#weread-ai-panel .wap-signal-panel');
-    if (!el) return;
-
-    const bestBookmarks = signalPanel.bestBookmarks || [];
-    const bookmarkReviews = signalPanel.bookmarkReviews || [];
-    const bookReviews = signalPanel.bookReviews || [];
-    const warnings = signalPanel.debug?.warnings || [];
     lastExpectedChapterWordCount = Number(signalPanel.chapter?.wordCount || 0) || 0;
-
-    el.innerHTML = `
-      <div class="wap-section">
-        <div class="wap-section-title">信号面板</div>
-        <div class="wap-meta">章节: ${escapeHtml(signalPanel.chapter?.title || '')}</div>
-        <div class="wap-meta">热门划线: ${bestBookmarks.length} 条 · 划线评论: ${countComments(bookmarkReviews)} 条 · 书评: ${bookReviews.length} 条</div>
-        ${renderCaptureMeta(signalPanel.chapter)}
-        ${renderAdviceScopeMeta(signalPanel.chapter)}
-        ${renderWarnings(warnings)}
-        ${renderHighlightEvidence(bestBookmarks, bookmarkReviews)}
-        ${renderBookReviews(bookReviews)}
-      </div>
-    `;
-  }
-
-  function renderHighlightEvidence(bestBookmarks, bookmarkReviews) {
-    if (bestBookmarks.length === 0) return '<div class="wap-hint">暂无本章热门划线</div>';
-    const reviewsByRange = buildReviewsByRange(bookmarkReviews);
-    return `
-      <div class="wap-section-title">热门划线</div>
-      <ul class="wap-highlights">
-        ${bestBookmarks.slice(0, 5).map((item) => {
-          const review = reviewsByRange.get(item.range);
-          return `
-          <li class="wap-highlight-item">
-            <div class="wap-highlight-row">
-              <span class="wap-hl-text">${escapeHtml(item.markText)}</span>
-              <span class="wap-hl-count">${Number(item.totalCount || 0)}人</span>
-            </div>
-            ${renderHighlightComments(review)}
-          </li>
-        `;
-        }).join('')}
-      </ul>
-    `;
-  }
-
-  function buildReviewsByRange(bookmarkReviews) {
-    return new Map((bookmarkReviews || [])
-      .filter((item) => item.range)
-      .map((item) => [item.range, item]));
-  }
-
-  function renderHighlightComments(review) {
-    if (!review || !review.comments || review.comments.length === 0) {
-      return '<div class="wap-hl-no-comments">暂无划线评论</div>';
-    }
-    return `
-      <div class="wap-highlight-comments">
-        <div class="wap-meta">评论 ${Number(review.totalCount || review.comments.length)} 条</div>
-        <ul class="wap-comments">
-          ${review.comments.slice(0, 3).map(renderHighlightComment).join('')}
-        </ul>
-      </div>
-    `;
-  }
-
-  function renderHighlightComment(comment) {
-    const content = getCommentContent(comment);
-    const likeCount = getCommentLikeCount(comment);
-    const likeText = hasCommentLikeCount(comment)
-      ? `<span class="wap-comment-like">${likeCount}赞</span>`
-      : '';
-    return `<li><span class="wap-comment-text">${escapeHtml(content)}</span>${likeText}</li>`;
-  }
-
-  function getCommentContent(comment) {
-    if (typeof comment === 'string') return comment;
-    if (!comment || typeof comment !== 'object') return '';
-    return String(comment.content || comment.text || comment.review || '');
-  }
-
-  function getCommentLikeCount(comment) {
-    if (!comment || typeof comment !== 'object') return 0;
-    const number = Number(comment.likeCount ?? comment.likesCount ?? 0);
-    return Number.isFinite(number) ? number : 0;
-  }
-
-  function hasCommentLikeCount(comment) {
-    return Boolean(comment && typeof comment === 'object' && (
-      Object.prototype.hasOwnProperty.call(comment, 'likeCount') ||
-      Object.prototype.hasOwnProperty.call(comment, 'likesCount')
-    ));
-  }
-
-  function renderBookReviews(items) {
-    if (items.length === 0) return '';
-    return `
-      <div class="wap-section-title">整本书评价背景</div>
-      <ul class="wap-comments">
-        ${items.slice(0, 3).map((item) => `<li>${escapeHtml(truncate(item.content, 120))}</li>`).join('')}
-      </ul>
-    `;
-  }
-
-  function renderWarnings(warnings) {
-    if (!warnings.length) return '';
-    return `<div class="wap-warning">${warnings.map(escapeHtml).join('<br>')}</div>`;
-  }
-
-  function renderCaptureMeta(chapter) {
-    const capturedLength = currentChapterText.length;
-    if (!capturedLength) return '';
-
-    const wordCount = Number(chapter?.wordCount || 0);
-    const coverage = wordCount ? ` · 约 ${Math.min(100, Math.round((capturedLength / wordCount) * 100))}%` : '';
-    const officialCount = wordCount ? ` / 官方 ${wordCount.toLocaleString()} 字` : '';
-    return `<div class="wap-meta">正文采集: ${escapeHtml(labelCaptureMode(lastCaptureMode))} · ${capturedLength.toLocaleString()} 字${officialCount}${coverage}</div>`;
-  }
-
-  function renderAdviceScopeMeta(chapter) {
-    const text = buildAdviceScopeText(Number(chapter?.wordCount || 0), currentChapterText.length, lastCaptureMode);
-    return text ? `<div class="wap-meta">建议范围: ${escapeHtml(text)}</div>` : '';
+    publishSummaryState({
+      signalPanel:
+        signalPanel
+    });
   }
 
   function updateJudgementLoading(text) {
-    const el = document.querySelector('#weread-ai-panel .wap-judgement');
-    if (!el) return;
-    el.innerHTML = `
-      <div class="wap-section wap-judgement-card">
-        <div class="wap-section-title">阅读判断</div>
-        <div class="wap-loading">${escapeHtml(text)}</div>
-      </div>
-    `;
+    publishSummaryState({
+      status: { type: 'waiting', text },
+      streamText: '',
+      readingJudgement: null
+    });
   }
 
   function appendJudgementDelta(text) {
-    const el = document.querySelector('#weread-ai-panel .wap-judgement');
-    if (!el) return;
-    let streamEl = el.querySelector('.wap-judgement-stream');
-    if (!streamEl) {
-      el.innerHTML = `
-        <div class="wap-section wap-judgement-card">
-          <div class="wap-section-title">阅读判断</div>
-          <div class="wap-judgement-stream"></div>
-        </div>
-      `;
-      streamEl = el.querySelector('.wap-judgement-stream');
-    }
-    streamEl.textContent += text;
+    publishSummaryState({
+      streamText:
+        `${latestSummaryState.streamText || ''}${text}`
+    });
   }
 
   function renderJudgement(judgement) {
-    const el = document.querySelector('#weread-ai-panel .wap-judgement');
-    if (!el) return;
-    const adviceScope = buildAdviceScopeText(lastExpectedChapterWordCount, currentChapterText.length, lastCaptureMode) || '实时建议';
-    el.innerHTML = `
-      <div class="wap-section wap-judgement-card">
-        <div class="wap-judgement-heading">
-          <div class="wap-section-title">阅读判断</div>
-          <span class="wap-scope-badge">${escapeHtml(adviceScope)}</span>
-        </div>
-        <div class="wap-verdict">${escapeHtml(labelRecommendation(judgement.recommendation))}</div>
-        ${renderSchemaWarning(judgement.schemaWarning)}
-        ${renderMasteryScore(judgement.masteryScore)}
-        ${renderList('最需要掌握', judgement.nextMustKnow)}
-        ${renderList('理由', judgement.reasons)}
-        ${renderList('重点段落', judgement.keyPassages)}
-        ${renderList('追问问题', judgement.questionsForAuthor)}
-        ${renderTextSection('读者视角', judgement.readerPerspective)}
-        ${renderTextSection('阅读建议', judgement.readingAdvice)}
-      </div>
-    `;
-  }
-
-  function renderSchemaWarning(message) {
-    if (!message) return '';
-    return `<div class="wap-warning">${escapeHtml(message)}</div>`;
-  }
-
-  function renderMasteryScore(masteryScore) {
-    const score = masteryScore || {};
-    if (!hasNumericScore(score.overall)) return '';
-
-    return `
-      <div class="wap-score-panel">
-        <div class="wap-score-main">
-          <span class="wap-score-label">掌握价值分</span>
-          <span class="wap-score-value">${escapeHtml(normalizeDisplayScore(score.overall))}</span>
-        </div>
-        <div class="wap-score-grid">
-          <div class="wap-score-item"><strong>信息密度</strong><span>${escapeHtml(normalizeDisplayScore(score.informationDensity))}</span></div>
-          <div class="wap-score-item"><strong>结构关键</strong><span>${escapeHtml(normalizeDisplayScore(score.structuralImportance))}</span></div>
-          <div class="wap-score-item"><strong>跳读风险</strong><span>${escapeHtml(normalizeDisplayScore(score.skipRisk))}</span></div>
-        </div>
-      </div>
-    `;
+    publishSummaryState({
+      readingJudgement:
+        normalizeReadingJudgement(judgement),
+      streamText: ''
+    });
   }
 
   function hasNumericScore(value) {
@@ -489,91 +136,17 @@
     return Number.isFinite(number);
   }
 
-  function normalizeDisplayScore(value) {
-    const number = Number(value);
-    if (!Number.isFinite(number)) return '0';
-    return String(Math.max(0, Math.min(100, Math.round(number))));
-  }
-
-  function renderList(title, items) {
-    if (!items || items.length === 0) return '';
-    return `
-      <div class="wap-analysis-section">
-        <div class="wap-analysis-title">${escapeHtml(title)}</div>
-        <ul class="wap-comments">
-          ${items.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}
-        </ul>
-      </div>
-    `;
-  }
-
-  function renderTextSection(title, text) {
-    if (!text || !text.trim()) return '';
-    return `
-      <div class="wap-analysis-section">
-        <div class="wap-analysis-title">${escapeHtml(title)}</div>
-        <div class="wap-analysis-content">${escapeHtml(text)}</div>
-      </div>
-    `;
-  }
-
   function updateDebug(summary) {
-    const el = document.querySelector('#weread-ai-panel .wap-debug-content');
-    if (!el) return;
-    el.textContent = JSON.stringify(summary, null, 2);
+    publishSummaryState({ debug: summary });
   }
 
   function updateFullRequestDebug(fullRequest) {
-    const contentEl = document.querySelector('#weread-ai-panel .wap-full-request-content');
-    const copyButton = document.querySelector('#weread-ai-panel .wap-debug-copy');
-    const statusEl = document.querySelector('#weread-ai-panel .wap-debug-copy-status');
-
     if (!fullRequest) {
-      lastFullRequestText = '';
-      if (contentEl) contentEl.textContent = '暂无完整请求';
-      if (copyButton) copyButton.disabled = true;
-      if (statusEl) statusEl.textContent = '';
+      publishSummaryState({ fullRequest: null });
       return;
     }
 
-    lastFullRequestText = JSON.stringify(fullRequest, null, 2);
-    if (contentEl) contentEl.textContent = lastFullRequestText;
-    if (copyButton) copyButton.disabled = false;
-    if (statusEl) statusEl.textContent = '';
-  }
-
-  async function copyFullRequest() {
-    const statusEl = document.querySelector('#weread-ai-panel .wap-debug-copy-status');
-    if (!lastFullRequestText) {
-      if (statusEl) statusEl.textContent = '暂无内容';
-      return;
-    }
-
-    try {
-      await writeClipboard(lastFullRequestText);
-      if (statusEl) statusEl.textContent = '已复制';
-    } catch (err) {
-      log('warn', '复制完整请求失败', { message: err.message });
-      if (statusEl) statusEl.textContent = '复制失败';
-    }
-  }
-
-  async function writeClipboard(text) {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return;
-    }
-
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.setAttribute('readonly', '');
-    textarea.style.position = 'fixed';
-    textarea.style.left = '-9999px';
-    document.body.appendChild(textarea);
-    textarea.select();
-    const ok = document.execCommand('copy');
-    textarea.remove();
-    if (!ok) throw new Error('execCommand copy failed');
+    publishSummaryState({ fullRequest });
   }
 
   function extractChapterContent() {
@@ -965,6 +538,18 @@
 
       const validation = validateContent(chapterText);
       updateStatus(validation.looksValid ? 'success' : 'waiting', `${chapterTitle} · ${formatCaptureLength(chapterText.length, capture)}`);
+      publishSummaryState({
+        bookTitle,
+        chapterTitle,
+        capture: buildSummaryCapture({
+          chapterText,
+          captureMode: capture.mode,
+          captureStats: capture.stats
+        }),
+        signalPanel: null,
+        readingJudgement: null,
+        streamText: ''
+      });
 
       const snapshot = await buildReadingSnapshot({
         bookId,
@@ -1009,6 +594,15 @@
     };
   }
 
+  function buildSummaryCapture(snapshot, signalPanel = null) {
+    return {
+      mode: snapshot.captureMode,
+      stats: snapshot.captureStats || {},
+      textLength: snapshot.chapterText.length,
+      expectedWordCount: Number(signalPanel?.chapter?.wordCount || 0) || null
+    };
+  }
+
   function updateSameChapterCaptureStatus({ chapterTitle, capture }) {
     log('log', 'same_chapter_capture_updated', {
       chapterTitle,
@@ -1017,6 +611,15 @@
       stats: capture.stats
     });
     updateStatus('success', `${chapterTitle} · ${formatCaptureLength(capture.text.length, capture)} · 采集已更新，可点本章判断`);
+    publishSummaryState({
+      chapterTitle,
+      capture: {
+        mode: capture.mode,
+        stats: capture.stats,
+        textLength: capture.text.length,
+        expectedWordCount: lastExpectedChapterWordCount || null
+      }
+    });
   }
 
   async function uploadSnapshot(snapshot) {
@@ -1032,8 +635,16 @@
     }
 
     const body = response.body;
-    currentSnapshotId = body.snapshotId;
     lastSignalPanel = body.signalPanel;
+    publishSummaryState({
+      bookTitle: snapshot.bookTitle,
+      chapterTitle: snapshot.chapterTitle,
+      snapshotId: body.snapshotId,
+      cache: body.cache,
+      capture: buildSummaryCapture(snapshot, body.signalPanel),
+      signalPanel:
+        body.signalPanel
+    });
     updateSignalPanel(body.signalPanel);
     updateStatus('success', formatChapterProgress(snapshot.chapterTitle, `已发送 ${formatCaptureLength(snapshot.chapterText.length, snapshot)}，正在生成阅读判断...`));
     updateFullRequestDebug(buildFullRequestDebug(snapshot, body));
@@ -1062,7 +673,7 @@
       } else if (message.event === 'delta') {
         appendJudgementDelta(message.data.text || '');
       } else if (message.event === 'complete') {
-        renderJudgement(normalizeReadingJudgement(message.data));
+        renderJudgement(message.data);
         updateStatus('success', `${currentChapterTitle} · ${formatCaptureLength(currentChapterText.length, { mode: lastCaptureMode, stats: lastCaptureStats })} · 判断完成`);
         judgementPort.disconnect();
         judgementPort = null;
@@ -1079,7 +690,7 @@
   }
 
   function normalizeReadingJudgement(data) {
-    const judgement = data?.readingJudgement || data?.judgement || {};
+    const judgement = data?.readingJudgement || data?.judgement || data || {};
     return {
       recommendation: judgement.recommendation || fromLegacyConclusion(judgement.conclusion),
       masteryScore: judgement.masteryScore || null,
@@ -1336,12 +947,12 @@
           structuralImportance: '0-100 结构关键性分',
           skipRisk: '0-100 可跳读风险分'
         },
-        nextMustKnow: ['1-4 条接下来最需要掌握的概念、区分或结构'],
-        reasons: ['2-3 条只基于当前章节与信号的判断依据'],
-        keyPassages: ['3-5 条热门划线或已采集正文片段'],
-        questionsForAuthor: ['带着阅读的问题，不要给答案'],
+        nextMustKnow: ['1-3 条接下来最需要掌握的概念、区分或结构'],
+        reasons: ['1-2 条只基于当前章节与信号的判断依据'],
+        keyPassages: ['1-3 条热门划线或已采集正文片段'],
+        questionsForAuthor: ['1-2 个带着阅读的问题，只给问题，不要给答案'],
         readerPerspective: '评论中的共识、争议、误读或补充',
-        readingAdvice: '接下来精读、快读或跳读的具体方式'
+        readingAdvice: '一句明确阅读动作，60字内，直接说明精读、快读或跳读怎么做'
       }
     };
   }
@@ -1388,31 +999,11 @@
     return `${normalized.slice(0, 80)} ... ${normalized.slice(-80)}`;
   }
 
-  function countComments(items) {
-    return items.reduce((sum, item) => sum + (item.comments ? item.comments.length : 0), 0);
-  }
-
-  function labelRecommendation(value) {
-    if (value === 'deep_read') return '值得精读';
-    if (value === 'skip_read') return '可跳读';
-    return '可快读';
-  }
-
   function labelCaptureMode(value) {
     if (value === 'passive-accumulated') return '被动累计';
     if (value === 'server-skill') return '服务器正文';
     if (value === 'background-clone') return '后台副本';
     return '当前可见';
-  }
-
-  function buildAdviceScopeText(expectedWordCount, capturedLength, mode) {
-    if (!capturedLength) return '';
-    const ratio = expectedWordCount ? capturedLength / expectedWordCount : null;
-    const status = classifyCaptureCoverage(mode, ratio);
-    if (status === 'full') return '章节级建议';
-    if (status === 'substantial') return `阶段性建议，正文覆盖约 ${Math.round(ratio * 100)}%`;
-    if (ratio !== null) return `阶段性建议，正文覆盖约 ${Math.round(ratio * 100)}%`;
-    return '阶段性建议，正文覆盖率未知';
   }
 
   function formatCaptureLength(length, capture) {
@@ -1424,17 +1015,6 @@
 
   function normalizeServerUrl(value) {
     return String(value || 'http://127.0.0.1:19763').replace(/\/+$/, '');
-  }
-
-  function truncate(text, maxLength) {
-    if (!text || text.length <= maxLength) return text || '';
-    return `${text.slice(0, maxLength)}...`;
-  }
-
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = String(text || '');
-    return div.innerHTML;
   }
 
   function summarizeCanvasCapture(lines, text) {
@@ -1470,7 +1050,8 @@
   function init() {
     if (!location.href.includes('weread.qq.com/web/reader/')) return;
     installCanvasTextBridge();
-    createPanel();
+    installRuntimeMessageHandlers();
+    installKeyboardShortcuts();
     setTimeout(() => {
       requestCanvasTextDump();
       startObserving();
