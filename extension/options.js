@@ -1,74 +1,55 @@
+const DEFAULT_AGENT_CONFIG = {
+  serverUrl: 'http://127.0.0.1:8787',
+  clientToken: 'dev-token'
+};
+
 document.addEventListener('DOMContentLoaded', async () => {
-  const wereadKeyInput = document.getElementById('weread-api-key');
-  const llmProvider = document.getElementById('llm-provider');
-  const llmKeyInput = document.getElementById('llm-api-key');
-  const llmModel = document.getElementById('llm-model');
-  const llmBase = document.getElementById('llm-api-base');
-  const customBaseGroup = document.getElementById('custom-base-group');
+  const serverUrlInput = document.getElementById('agent-server-url');
+  const clientTokenInput = document.getElementById('client-token');
   const saveBtn = document.getElementById('save-btn');
   const testBtn = document.getElementById('test-btn');
   const status = document.getElementById('status');
 
-  const result = await chrome.storage.local.get(['wereadApiKey', 'llmConfig']);
-  if (result.wereadApiKey) wereadKeyInput.value = result.wereadApiKey;
-  if (result.llmConfig) {
-    llmProvider.value = result.llmConfig.provider || 'openai';
-    llmKeyInput.value = result.llmConfig.apiKey || '';
-    llmModel.value = result.llmConfig.model || 'gpt-4o-mini';
-    llmBase.value = result.llmConfig.apiBase || '';
-  }
-
-  llmProvider.addEventListener('change', () => {
-    customBaseGroup.style.display = llmProvider.value === 'custom' ? 'block' : 'none';
-    if (llmProvider.value === 'openai') {
-      llmBase.value = 'https://api.openai.com/v1';
-    } else if (llmProvider.value === 'anthropic') {
-      llmBase.value = 'https://api.anthropic.com/v1';
-    }
-  });
+  const result = await chrome.storage.local.get(['agentConfig']);
+  const agentConfig = { ...DEFAULT_AGENT_CONFIG, ...(result.agentConfig || {}) };
+  serverUrlInput.value = agentConfig.serverUrl;
+  clientTokenInput.value = agentConfig.clientToken;
 
   saveBtn.addEventListener('click', async () => {
     await chrome.storage.local.set({
-      wereadApiKey: wereadKeyInput.value.trim(),
-      llmConfig: {
-        provider: llmProvider.value,
-        apiKey: llmKeyInput.value.trim(),
-        model: llmModel.value.trim(),
-        apiBase: llmBase.value.trim()
-      }
+      agentConfig: readConfig()
     });
     showStatus('配置已保存', 'success');
   });
 
   testBtn.addEventListener('click', async () => {
-    showStatus('正在测试...', 'success');
+    const config = readConfig();
+    showStatus('正在测试连接...', 'success');
     try {
-      const resp = await fetch(`${llmBase.value}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${llmKeyInput.value.trim()}`
-        },
-        body: JSON.stringify({
-          model: llmModel.value.trim(),
-          messages: [{ role: 'user', content: 'Hello' }],
-          max_tokens: 5
-        })
-      });
-      if (resp.ok) {
-        showStatus('连接成功', 'success');
-      } else {
-        const err = await resp.text();
-        showStatus(`连接失败: ${err}`, 'error');
+      const resp = await fetch(`${normalizeServerUrl(config.serverUrl)}/health`);
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`);
       }
+      const body = await resp.json();
+      showStatus(`连接成功\n${JSON.stringify(body)}`, 'success');
     } catch (err) {
       showStatus(`连接失败: ${err.message}`, 'error');
     }
   });
 
+  function readConfig() {
+    return {
+      serverUrl: normalizeServerUrl(serverUrlInput.value || DEFAULT_AGENT_CONFIG.serverUrl),
+      clientToken: clientTokenInput.value.trim() || DEFAULT_AGENT_CONFIG.clientToken
+    };
+  }
+
   function showStatus(text, type) {
     status.textContent = text;
-    status.className = 'status ' + type;
-    setTimeout(() => { status.className = 'status'; }, 3000);
+    status.className = `status ${type}`;
   }
 });
+
+function normalizeServerUrl(value) {
+  return String(value || DEFAULT_AGENT_CONFIG.serverUrl).replace(/\/+$/, '');
+}

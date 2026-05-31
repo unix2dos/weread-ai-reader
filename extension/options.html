@@ -6,7 +6,7 @@
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      max-width: 600px;
+      max-width: 620px;
       margin: 40px auto;
       padding: 20px;
       background: #f5f5f5;
@@ -23,7 +23,7 @@
       color: #333;
     }
     .subtitle {
-      color: #888;
+      color: #777;
       margin-bottom: 30px;
       font-size: 14px;
     }
@@ -51,7 +51,7 @@
       color: #555;
       font-size: 14px;
     }
-    input[type="text"], input[type="password"], select {
+    input[type="text"], input[type="password"] {
       width: 100%;
       padding: 10px 12px;
       border: 1px solid #ddd;
@@ -59,7 +59,7 @@
       font-size: 14px;
       box-sizing: border-box;
     }
-    input:focus, select:focus {
+    input:focus {
       outline: none;
       border-color: #007AFF;
     }
@@ -67,6 +67,7 @@
       margin-top: 6px;
       font-size: 12px;
       color: #888;
+      line-height: 1.5;
     }
     .btn {
       background: #007AFF;
@@ -77,6 +78,7 @@
       font-size: 14px;
       cursor: pointer;
       margin-top: 8px;
+      margin-right: 8px;
     }
     .btn:hover {
       background: #0056b3;
@@ -94,6 +96,7 @@
       border-radius: 6px;
       font-size: 13px;
       display: none;
+      white-space: pre-wrap;
     }
     .status.success {
       background: #d4edda;
@@ -110,39 +113,19 @@
 <body>
   <div class="container">
     <h1>WeRead AI Reader</h1>
-    <div class="subtitle">配置你的 AI 阅读助手</div>
+    <div class="subtitle">配置 Chrome 扩展连接的 Agent 服务器</div>
 
     <div class="section">
-      <div class="section-title">📚 微信读书 API</div>
+      <div class="section-title">Agent 服务器</div>
       <div class="form-group">
-        <label for="weread-api-key">WeRead API Key</label>
-        <input type="password" id="weread-api-key" placeholder="wrk-xxxxxxxx">
-        <div class="help-text">从 <a href="https://weread.qq.com/r/weread-skills" target="_blank">weread.qq.com/r/weread-skills</a> 获取</div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">🤖 LLM 配置</div>
-      <div class="form-group">
-        <label for="llm-provider">AI 提供商</label>
-        <select id="llm-provider">
-          <option value="openai">OpenAI</option>
-          <option value="anthropic">Anthropic (Claude)</option>
-          <option value="custom">自定义</option>
-        </select>
+        <label for="agent-server-url">Agent Server URL</label>
+        <input type="text" id="agent-server-url" placeholder="http://127.0.0.1:8787">
+        <div class="help-text">WeRead API Key 和 LLM API Key 都配置在服务器环境变量中，不保存在 Chrome 扩展里。</div>
       </div>
       <div class="form-group">
-        <label for="llm-api-key">API Key</label>
-        <input type="password" id="llm-api-key" placeholder="sk-...">
-      </div>
-      <div class="form-group">
-        <label for="llm-model">模型</label>
-        <input type="text" id="llm-model" value="gpt-4o-mini" placeholder="gpt-4o-mini">
-        <div class="help-text">推荐: gpt-4o-mini, claude-3-haiku-20240307</div>
-      </div>
-      <div class="form-group" id="custom-base-group" style="display:none;">
-        <label for="llm-api-base">API 基础 URL</label>
-        <input type="text" id="llm-api-base" placeholder="https://api.openai.com/v1">
+        <label for="client-token">clientToken</label>
+        <input type="password" id="client-token" placeholder="dev-token">
+        <div class="help-text">V1 映射到单用户 Agent 服务器，未来可扩展为多用户访问令牌。</div>
       </div>
     </div>
 
