@@ -42,9 +42,9 @@
 
 ### Task 3: Summary Window UI
 
-- [x] Create `summary.html` with status, judgement, must-know, questions, advice, evidence, and debug containers.
+- [x] Create `summary.html` with status, judgement, reading-signal, and debug containers.
 - [x] Create `summary.js` to request `GET_SUMMARY_STATE`, render empty/loading/complete/error states, and listen for `SUMMARY_STATE_UPDATED`.
-- [x] Create `styles/summary.css` for a dense reading companion layout with collapsible evidence.
+- [x] Create `styles/summary.css` for a dense reading companion layout with foldable reading signals and debug.
 - [x] Persist bounds from `beforeunload` and a low-frequency interval using `window.screenX`, `window.screenY`, `window.outerWidth`, and `window.outerHeight`.
 
 ### Task 4: Compact In-Page Entry
@@ -72,7 +72,8 @@
 
 ### Task 6: Value-Dense Summary
 
-- [x] Add tests that assert the summary first screen contains only recommendation, mastery score, at most 3 must-know items, at most 2 questions, and one reading action.
-- [x] Move reader perspective, reasons, key passages, evidence, and debug output into the collapsed evidence layer.
+- [x] Add tests that assert the summary first screen contains recommendation, mastery score, at most 3 must-know items, at most 2 questions, one reading action, and Agent analysis fields.
+- [x] Keep reader perspective, reasons, and key passages in the reading judgement because they are Agent analysis output.
+- [x] Move WeRead raw signals into a default-open reading-signal frame and keep debug limited to request summary plus complete request.
 - [x] Tighten the reading-strategy prompt and parser limits to reduce noisy output before it reaches the UI.
 - [x] Reduce short-judgement output budget from 1200 to 900 tokens.
