@@ -87,8 +87,11 @@ test('buildStrategyInput includes mastery score and author-question output requi
   assert.equal(input.outputShape.masteryScore.informationDensity, '0-100 信息密度分');
   assert.equal(input.outputShape.masteryScore.structuralImportance, '0-100 结构关键性分');
   assert.equal(input.outputShape.masteryScore.skipRisk, '0-100 可跳读风险分');
-  assert.equal(input.outputShape.nextMustKnow[0], '1-4 条接下来最需要掌握的概念、区分或结构');
-  assert.equal(input.outputShape.questionsForAuthor[0], '带着阅读的问题，不要给答案');
+  assert.equal(input.outputShape.nextMustKnow[0], '1-3 条接下来最需要掌握的概念、区分或结构');
+  assert.equal(input.outputShape.reasons[0], '1-2 条只基于当前章节与信号的判断依据');
+  assert.equal(input.outputShape.keyPassages[0], '1-3 条热门划线或已采集正文片段；公开划线不足时使用当前可见正文片段');
+  assert.equal(input.outputShape.questionsForAuthor[0], '1-2 个带着阅读的问题，只给问题，不要给答案');
+  assert.equal(input.outputShape.readingAdvice, '一句明确阅读动作，60字内，直接说明精读、快读或跳读怎么做');
 });
 
 test('buildCaptureInput reports capture coverage for partial chapter text', () => {
@@ -112,6 +115,9 @@ test('buildMessages includes required system prompt constraints', () => {
   assert.match(systemPrompt, /追问问题只给问题/);
   assert.match(systemPrompt, /不要给答案/);
   assert.match(systemPrompt, /不要模拟作者对话/);
+  assert.match(systemPrompt, /二八原则/);
+  assert.match(systemPrompt, /首屏/);
+  assert.match(systemPrompt, /一句明确阅读动作/);
   assert.match(systemPrompt, /必须只输出 JSON/);
   assert.match(systemPrompt, /recommendation 只能是 deep_read、quick_read 或 skip_read/);
   assert.match(systemPrompt, /优先使用公开阅读信号，其次参考书籍上下文，仅在存在个人信号时使用个人信号/);
@@ -126,7 +132,7 @@ test('buildRequestBody asks for JSON-only mastery judgement', () => {
 
   assert.equal(body.model, 'deepseek-v4-flash');
   assert.equal(body.stream, true);
-  assert.equal(body.max_tokens, 1200);
+  assert.equal(body.max_tokens, 900);
   assert.deepEqual(body.response_format, { type: 'json_object' });
   assert.match(body.messages[0].content, /掌握价值分/);
   assert.match(body.messages[0].content, /追问问题只给问题/);
@@ -208,10 +214,10 @@ test('parseReadingJudgement limits list fields', () => {
     questionsForAuthor: ['一', '二', '三', '四', '五', '六']
   })));
 
-  assert.deepEqual(judgement.nextMustKnow, ['一', '二', '三', '四']);
-  assert.deepEqual(judgement.reasons, ['一', '二', '三']);
-  assert.deepEqual(judgement.keyPassages, ['一', '二', '三', '四', '五']);
-  assert.deepEqual(judgement.questionsForAuthor, ['一', '二', '三', '四', '五']);
+  assert.deepEqual(judgement.nextMustKnow, ['一', '二', '三']);
+  assert.deepEqual(judgement.reasons, ['一', '二']);
+  assert.deepEqual(judgement.keyPassages, ['一', '二', '三']);
+  assert.deepEqual(judgement.questionsForAuthor, ['一', '二']);
 });
 
 test('parseReadingJudgement rejects invalid model output', () => {

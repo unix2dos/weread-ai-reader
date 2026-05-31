@@ -10,7 +10,7 @@ The accepted direction is to split strategy, provider transport, and UI display 
 
 - Give the reader a faster answer to "what do I most need to master next?"
 - Add chapter scoring with a 0-100 mastery value score and three sub-scores: information density, structural importance, and skip risk.
-- Add 3-5 questions for the reader to ask while reading. These are not answered by the model and do not simulate a conversation with the author.
+- Add 1-2 questions for the reader to ask while reading. These are not answered by the model and do not simulate a conversation with the author.
 - Expand WeRead Skill usage with layered signals instead of indiscriminately calling every available endpoint.
 - Make AI request construction and result parsing stable enough to reuse in model benchmarking.
 - Preserve the current signal-first, SSE-streamed reading judgement flow.
@@ -29,7 +29,7 @@ The accepted direction is to split strategy, provider transport, and UI display 
 - Book context signals: book metadata, chapter catalogue, chapter word count, book rating, and current reading progress.
 - Personal reading signals: the current user's highlights, ideas, reviews, and reading progress. These are optional enhancement signals.
 - Mastery value score: a 0-100 score for how much attention this chapter deserves for understanding the book or continuing the reading path. It is not a literary-quality score.
-- Questions for author: 3-5 questions the user should carry into reading. They contain no answers.
+- Questions for author: 1-2 questions the user should carry into reading. They contain no answers.
 
 ## Architecture
 

@@ -114,6 +114,25 @@ function createOpenAiSseBody(contentDeltas) {
   ]);
 }
 
+function createCompleteModelContent(overrides = {}) {
+  return JSON.stringify({
+    recommendation: 'deep_read',
+    masteryScore: {
+      overall: 88,
+      informationDensity: 82,
+      structuralImportance: 90,
+      skipRisk: 75
+    },
+    nextMustKnow: ['核心概念如何支撑后文'],
+    reasons: ['热门划线集中在核心定义。'],
+    keyPassages: ['核心概念'],
+    questionsForAuthor: ['作者为什么先定义这个概念？'],
+    readerPerspective: '读者认为这里是基础。',
+    readingAdvice: '先精读定义段。',
+    ...overrides
+  });
+}
+
 test('rejects snapshots with an invalid client token', async () => {
   const app = createApp({
     config: { clientToken: 'dev-token' },
@@ -173,7 +192,7 @@ test('returns snapshot id and structured signal panel for a valid reading snapsh
     assert.equal(requestContent.promptVersion, 'reading-strategy-v2');
     assert.equal(requestContent.outputShape.recommendation, 'deep_read | quick_read | skip_read');
     assert.equal(requestContent.outputShape.masteryScore.overall, '0-100 掌握价值分');
-    assert.equal(requestContent.outputShape.questionsForAuthor[0], '带着阅读的问题，不要给答案');
+    assert.equal(requestContent.outputShape.questionsForAuthor[0], '1-2 个带着阅读的问题，只给问题，不要给答案');
     assert.match(body.agentRequest.body.messages[1].content, /这一章讨论了如何判断一章是否值得精读/);
     assert.doesNotMatch(JSON.stringify(body.agentRequest), /test-key|dev-token/);
     assert.equal(body.signalPanel.bestBookmarks[0].markText, '值得精读的关键段落');
@@ -199,21 +218,7 @@ test('returns snapshot id and structured signal panel for a valid reading snapsh
 });
 
 test('llmClient streams reading advice deltas and completes with reading strategy judgement', async () => {
-  const modelContent = JSON.stringify({
-    recommendation: 'deep_read',
-    masteryScore: {
-      overall: 88,
-      informationDensity: 82,
-      structuralImportance: 90,
-      skipRisk: 75
-    },
-    nextMustKnow: ['核心概念如何支撑后文'],
-    reasons: ['热门划线集中在核心定义。'],
-    keyPassages: ['核心概念'],
-    questionsForAuthor: ['作者为什么先定义这个概念？'],
-    readerPerspective: '读者认为这里是基础。',
-    readingAdvice: '先精读定义段。'
-  });
+  const modelContent = createCompleteModelContent();
   const client = createLlmClient({
     apiKey: 'test-key',
     apiBase: 'https://llm.example/v1',
@@ -254,6 +259,99 @@ test('llmClient streams reading advice deltas and completes with reading strateg
   assert.equal(events[1].type, 'complete');
   assert.equal(events[1].readingJudgement.recommendation, 'deep_read');
   assert.equal(events[1].judgement.conclusion, 'worth_deep_read');
+});
+
+test('llmClient falls back to the next OpenCode Go model when the primary model is rate limited', async () => {
+  const modelContent = createCompleteModelContent();
+  const fetchCalls = [];
+  const client = createLlmClient({
+    apiKey: 'test-key',
+    apiBase: 'https://opencode.ai/zen/go/v1',
+    model: 'mimo-v2.5',
+    fallbackModels: ['kimi-k2.6', 'mimo-v2.5'],
+    fetchImpl: async (url, options) => {
+      const body = JSON.parse(options.body);
+      fetchCalls.push({ url, model: body.model });
+      if (fetchCalls.length === 1) {
+        return {
+          ok: false,
+          status: 429,
+          text: async () => '{"error":{"message":"Too many requests","code":429}}'
+        };
+      }
+      return {
+        ok: true,
+        body: createOpenAiSseBody([modelContent])
+      };
+    }
+  });
+
+  const events = [];
+  for await (const event of client.streamShortJudgement({
+    snapshot: createSnapshot(),
+    signalPanel: {
+      chapter: { chapterUid: 101, wordCount: 3200 },
+      bestBookmarks: [],
+      bookmarkReviews: [],
+      bookReviews: [],
+      debug: { resolvedBookId: 'book-1' }
+    },
+    promptVersion: 'reading-strategy-v2'
+  })) {
+    events.push(event);
+  }
+
+  assert.deepEqual(fetchCalls.map((call) => call.model), ['mimo-v2.5', 'kimi-k2.6']);
+  assert.equal(fetchCalls[0].url, 'https://opencode.ai/zen/go/v1/chat/completions');
+  assert.equal(events.at(-1).type, 'complete');
+  assert.equal(events.at(-1).readingJudgement.recommendation, 'deep_read');
+});
+
+test('llmClient falls back to the next OpenCode Go model after a transient fetch failure', async () => {
+  const modelContent = createCompleteModelContent({
+    readingAdvice: '切换模型后继续生成阅读建议。'
+  });
+  const fetchCalls = [];
+  const client = createLlmClient({
+    apiKey: 'test-key',
+    apiBase: 'https://opencode.ai/zen/go/v1',
+    model: 'mimo-v2.5',
+    fallbackModels: ['kimi-k2.6'],
+    fetchImpl: async (url, options) => {
+      const body = JSON.parse(options.body);
+      fetchCalls.push(body.model);
+      if (fetchCalls.length === 1) {
+        throw new TypeError('fetch failed');
+      }
+      return {
+        ok: true,
+        body: createOpenAiSseBody([modelContent])
+      };
+    }
+  });
+
+  const events = [];
+  for await (const event of client.streamShortJudgement({
+    snapshot: createSnapshot(),
+    signalPanel: {
+      chapter: { chapterUid: 101, wordCount: 3200 },
+      bestBookmarks: [],
+      bookmarkReviews: [],
+      bookReviews: [],
+      debug: { resolvedBookId: 'book-1' }
+    },
+    promptVersion: 'reading-strategy-v2'
+  })) {
+    events.push(event);
+  }
+
+  assert.deepEqual(fetchCalls, ['mimo-v2.5', 'kimi-k2.6']);
+  assert.deepEqual(events[0], {
+    type: 'delta',
+    field: 'readingAdvice',
+    text: '切换模型后继续生成阅读建议。'
+  });
+  assert.equal(events[1].type, 'complete');
 });
 
 test('llmClient rejects invalid streamed JSON without yielding a validated advice delta', async () => {

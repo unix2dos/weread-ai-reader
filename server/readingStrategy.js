@@ -6,7 +6,7 @@ const LEGACY_CONCLUSIONS = {
   quick_read: 'quick_read',
   skip_read: 'skip_read'
 };
-const MAX_OUTPUT_TOKENS = 1200;
+const MAX_OUTPUT_TOKENS = 900;
 const SIGNAL_LIMITS = {
   bestBookmarks: 8,
   bookmarkReviews: 6,
@@ -47,6 +47,8 @@ function buildMessages({
         '掌握价值分衡量继续读这一章能获得的概念、结构和风险收益，不是文学质量、文笔好坏或个人喜好评分。',
         'recommendation 只能是 deep_read、quick_read 或 skip_read。',
         'questionsForAuthor 是给读者带着阅读的追问问题；追问问题只给问题，不要给答案，不要模拟作者对话。',
+        '按二八原则输出：首屏只需要结论、掌握价值总分、最多三个掌握点、最多两个追问问题和一句明确阅读动作。',
+        'reasons、keyPassages、readerPerspective 是折叠证据层，不要写成长解释。',
         '所有 JSON 字段都必须有实际内容；没有评论信号时 readerPerspective 要说明“暂无足够公开评论信号”，不能留空。',
         '必须只输出 JSON，不要输出 Markdown、解释文字或代码块。',
         'JSON 字段必须包含 recommendation, masteryScore, nextMustKnow, reasons, keyPassages, questionsForAuthor, readerPerspective, readingAdvice。'
@@ -89,12 +91,12 @@ function buildStrategyInput({
         structuralImportance: '0-100 结构关键性分',
         skipRisk: '0-100 可跳读风险分'
       },
-      nextMustKnow: ['1-4 条接下来最需要掌握的概念、区分或结构'],
-      reasons: ['2-3 条只基于当前章节与信号的判断依据'],
-      keyPassages: ['1-5 条热门划线或已采集正文片段；公开划线不足时使用当前可见正文片段'],
-      questionsForAuthor: ['带着阅读的问题，不要给答案'],
+      nextMustKnow: ['1-3 条接下来最需要掌握的概念、区分或结构'],
+      reasons: ['1-2 条只基于当前章节与信号的判断依据'],
+      keyPassages: ['1-3 条热门划线或已采集正文片段；公开划线不足时使用当前可见正文片段'],
+      questionsForAuthor: ['1-2 个带着阅读的问题，只给问题，不要给答案'],
       readerPerspective: '评论中的共识、争议、误读或补充；没有评论信号时说明暂无足够公开评论信号',
-      readingAdvice: '接下来精读、快读或跳读的具体方式'
+      readingAdvice: '一句明确阅读动作，60字内，直接说明精读、快读或跳读怎么做'
     }
   };
 }
@@ -180,10 +182,10 @@ function parseReadingJudgement(raw) {
   const judgement = {
     recommendation,
     masteryScore: normalizeMasteryScore(parsed.masteryScore),
-    nextMustKnow: normalizeStringArray(parsed.nextMustKnow, 4),
-    reasons: normalizeStringArray(parsed.reasons, 3),
-    keyPassages: normalizeStringArray(parsed.keyPassages, 5),
-    questionsForAuthor: normalizeStringArray(parsed.questionsForAuthor, 5),
+    nextMustKnow: normalizeStringArray(parsed.nextMustKnow, 3),
+    reasons: normalizeStringArray(parsed.reasons, 2),
+    keyPassages: normalizeStringArray(parsed.keyPassages, 3),
+    questionsForAuthor: normalizeStringArray(parsed.questionsForAuthor, 2),
     readerPerspective: normalizeString(parsed.readerPerspective),
     readingAdvice: normalizeString(parsed.readingAdvice)
   };
@@ -197,8 +199,8 @@ function toLegacyJudgement(judgement) {
 
   return {
     conclusion: LEGACY_CONCLUSIONS[recommendation],
-    reasons: normalizeStringArray(judgement.reasons, 3),
-    keyPassages: normalizeStringArray(judgement.keyPassages, 5),
+    reasons: normalizeStringArray(judgement.reasons, 2),
+    keyPassages: normalizeStringArray(judgement.keyPassages, 3),
     readerPerspective: normalizeString(judgement.readerPerspective),
     readingAction: normalizeString(judgement.readingAdvice)
   };
