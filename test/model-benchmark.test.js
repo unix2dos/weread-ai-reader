@@ -46,9 +46,9 @@ function createJudgement(overrides = {}) {
     recommendation: 'deep_read',
     masteryScore: {
       overall: 88,
-      informationDensity: 84,
+      contentGain: 84,
       structuralImportance: 90,
-      skipRisk: 78
+      deepReadNecessity: 78
     },
     nextMustKnow: ['方向选择背后的资源约束', '短期机会和长期能力的区别', '结构差异如何影响个人选择'],
     reasons: ['热门划线集中在方向定义。', '评论认为这一段解释了分化原因。'],

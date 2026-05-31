@@ -942,9 +942,9 @@
       scoreRubric: {
         masteryScoreOverall: '服务端按固定权重从三个维度派生，模型输出的 overall 会被忽略',
         weights: {
-          informationDensity: 0.35,
+          contentGain: 0.35,
           structuralImportance: 0.4,
-          skipRisk: 0.25
+          deepReadNecessity: 0.25
         },
         thresholds: {
           mustDeepRead: '90-100 必须精读，本章是全书理解枢纽',
@@ -954,11 +954,11 @@
         }
       },
       outputShape: {
-        recommendation: 'deep_read | quick_read | skip_read',
+        recommendation: 'must_deep_read | deep_read | quick_read | skip_read',
         masteryScore: {
-          informationDensity: '0-100 信息密度分',
+          contentGain: '0-100 内容增量分',
           structuralImportance: '0-100 结构关键性分',
-          skipRisk: '0-100 可跳读风险分'
+          deepReadNecessity: '0-100 精读必要性分'
         },
         nextMustKnow: ['1-3 条接下来最需要掌握的概念、区分或结构'],
         reasons: ['1-2 条只基于当前章节与信号的判断依据'],
