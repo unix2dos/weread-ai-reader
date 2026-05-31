@@ -30,7 +30,14 @@ test('collapsed panel hides secondary actions to avoid squeezed controls', () =>
 test('collapsed AI entry can expand the panel by click', () => {
   assert.match(contentJs, /function installPanelToggle\(panel\)/);
   assert.match(contentJs, /panel\.querySelector\('\.wap-collapsed-title'\)/);
-  assert.match(contentJs, /collapsedTitle\.addEventListener\('click', \(\) => expandPanel\(panel\)\)/);
+  assert.match(contentJs, /collapsedTitle\.addEventListener\('click', \(\) => \{/);
+  assert.match(contentJs, /panel\.dataset\.dragJustEnded === 'true'/);
+  assert.match(contentJs, /expandPanel\(panel\)/);
+});
+
+test('collapsed AI entry remains draggable without triggering control button guard', () => {
+  assert.match(contentJs, /if \(e\.target\.closest\('\.wap-controls button'\)\) return;/);
+  assert.match(contentJs, /el\.dataset\.dragJustEnded = 'true'/);
 });
 
 test('highlight evidence renders comments under the matching highlight range', () => {
@@ -57,11 +64,11 @@ test('chapter judgement action uses a refresh icon and current-chapter wording',
   assert.doesNotMatch(contentJs, />重新判断</);
 });
 
-test('option q expands the collapsed panel without rerunning judgement', () => {
+test('option q toggles the panel without rerunning judgement', () => {
   assert.match(contentJs, /function installKeyboardShortcuts\(panel\)/);
   assert.match(contentJs, /event\.altKey && event\.code === 'KeyQ'/);
   assert.match(contentJs, /window\.addEventListener\('keydown', handleShortcut, true\)/);
-  assert.match(contentJs, /expandPanel\(panel\)/);
+  assert.match(contentJs, /togglePanel\(panel\)/);
   assert.doesNotMatch(contentJs, /event\.key\.toLowerCase\(\) === 'q'/);
 });
 

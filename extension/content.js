@@ -88,15 +88,20 @@
     const toggleButton = panel.querySelector('.wap-toggle');
     const collapsedTitle = panel.querySelector('.wap-collapsed-title');
 
-    toggleButton.addEventListener('click', () => {
-      if (panel.classList.contains('collapsed')) {
-        expandPanel(panel);
-      } else {
-        collapsePanel(panel);
-      }
-    });
+    toggleButton.addEventListener('click', () => togglePanel(panel));
 
-    collapsedTitle.addEventListener('click', () => expandPanel(panel));
+    collapsedTitle.addEventListener('click', () => {
+      if (panel.dataset.dragJustEnded === 'true') return;
+      expandPanel(panel);
+    });
+  }
+
+  function togglePanel(panel) {
+    if (panel.classList.contains('collapsed')) {
+      expandPanel(panel);
+    } else {
+      collapsePanel(panel);
+    }
   }
 
   function collapsePanel(panel) {
@@ -122,17 +127,18 @@
       const tagName = target?.tagName?.toLowerCase();
       if (tagName === 'input' || tagName === 'textarea' || target?.isContentEditable) return;
       event.preventDefault();
-      expandPanel(panel);
+      togglePanel(panel);
     };
 
     window.addEventListener('keydown', handleShortcut, true);
   }
 
   function makeDraggable(el, handle) {
-    let isDragging = false, startX, startY, origX, origY;
+    let isDragging = false, hasMoved = false, startX, startY, origX, origY;
     handle.addEventListener('mousedown', (e) => {
-      if (e.target.closest('button')) return;
+      if (e.target.closest('.wap-controls button')) return;
       isDragging = true;
+      hasMoved = false;
       startX = e.clientX;
       startY = e.clientY;
       const rect = el.getBoundingClientRect();
@@ -142,11 +148,24 @@
     });
     document.addEventListener('mousemove', (e) => {
       if (!isDragging) return;
-      el.style.left = (origX + e.clientX - startX) + 'px';
-      el.style.top = (origY + e.clientY - startY) + 'px';
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+      if (Math.abs(deltaX) + Math.abs(deltaY) > 3) {
+        hasMoved = true;
+      }
+      el.style.left = (origX + deltaX) + 'px';
+      el.style.top = (origY + deltaY) + 'px';
       el.style.right = 'auto';
     });
-    document.addEventListener('mouseup', () => { isDragging = false; });
+    document.addEventListener('mouseup', () => {
+      if (!isDragging) return;
+      isDragging = false;
+      if (!hasMoved) return;
+      el.dataset.dragJustEnded = 'true';
+      setTimeout(() => {
+        delete el.dataset.dragJustEnded;
+      }, 150);
+    });
   }
 
   function updateStatus(type, text) {
