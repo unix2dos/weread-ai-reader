@@ -345,10 +345,38 @@
       <div class="wap-highlight-comments">
         <div class="wap-meta">评论 ${Number(review.totalCount || review.comments.length)} 条</div>
         <ul class="wap-comments">
-          ${review.comments.slice(0, 3).map((comment) => `<li>${escapeHtml(comment)}</li>`).join('')}
+          ${review.comments.slice(0, 3).map(renderHighlightComment).join('')}
         </ul>
       </div>
     `;
+  }
+
+  function renderHighlightComment(comment) {
+    const content = getCommentContent(comment);
+    const likeCount = getCommentLikeCount(comment);
+    const likeText = hasCommentLikeCount(comment)
+      ? `<span class="wap-comment-like">${likeCount}赞</span>`
+      : '';
+    return `<li><span class="wap-comment-text">${escapeHtml(content)}</span>${likeText}</li>`;
+  }
+
+  function getCommentContent(comment) {
+    if (typeof comment === 'string') return comment;
+    if (!comment || typeof comment !== 'object') return '';
+    return String(comment.content || comment.text || comment.review || '');
+  }
+
+  function getCommentLikeCount(comment) {
+    if (!comment || typeof comment !== 'object') return 0;
+    const number = Number(comment.likeCount ?? comment.likesCount ?? 0);
+    return Number.isFinite(number) ? number : 0;
+  }
+
+  function hasCommentLikeCount(comment) {
+    return Boolean(comment && typeof comment === 'object' && (
+      Object.prototype.hasOwnProperty.call(comment, 'likeCount') ||
+      Object.prototype.hasOwnProperty.call(comment, 'likesCount')
+    ));
   }
 
   function renderBookReviews(items) {

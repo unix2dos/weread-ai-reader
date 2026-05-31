@@ -301,6 +301,18 @@
   margin-bottom: 5px;
 }
 
+.wap-comment-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.wap-comment-like {
+  color: #64748b;
+  font-size: 11px;
+  white-space: nowrap;
+  margin-left: 8px;
+}
+
 .wap-warning {
   padding: 8px 10px;
   margin-bottom: 10px;

@@ -120,8 +120,7 @@ function buildPublicSignalsInput(signalPanel) {
     )),
     bookmarkReviews: limitArray(publicSignals.bookmarkReviews, SIGNAL_LIMITS.bookmarkReviews, (item) => ({
       ...trimObjectStrings(item, SIGNAL_LIMITS.shortText),
-      comments: normalizeStringArray(item?.comments, SIGNAL_LIMITS.bookmarkReviewComments)
-        .map((comment) => truncateText(comment, SIGNAL_LIMITS.shortText))
+      comments: normalizeBookmarkReviewComments(item?.comments, SIGNAL_LIMITS.bookmarkReviewComments)
     })),
     bookReviews: limitArray(publicSignals.bookReviews, SIGNAL_LIMITS.bookReviews, (item) => (
       trimObjectStrings(item, SIGNAL_LIMITS.reviewText)
@@ -327,6 +326,31 @@ function normalizeStringArray(value, limit) {
     .filter((item) => typeof item === 'string' && item.trim())
     .map((item) => item.trim())
     .slice(0, limit);
+}
+
+function normalizeBookmarkReviewComments(value, limit) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      if (typeof item === 'string') {
+        return { content: item.trim(), likeCount: 0 };
+      }
+      if (!item || typeof item !== 'object') {
+        return { content: '', likeCount: 0 };
+      }
+      const likeCount = Number(item.likeCount ?? item.likesCount ?? 0);
+      return {
+        content: String(item.content || item.text || item.review || '').trim(),
+        likeCount: Number.isFinite(likeCount) ? likeCount : 0
+      };
+    })
+    .filter((item) => item.content)
+    .slice(0, limit)
+    .map((item) => ({
+      content: truncateText(item.content, SIGNAL_LIMITS.shortText),
+      likeCount: item.likeCount
+    }));
 }
 
 function normalizeString(value) {

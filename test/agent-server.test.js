@@ -84,10 +84,12 @@ function createStubWeReadClient(calls) {
           reviews: [
             {
               range: '1-20',
-              totalCount: 2,
+              totalCount: 4,
               pageReviews: [
-                { review: { content: '这段是本章核心。' } },
-                { review: { content: '这里和全书主题呼应。' } }
+                { review: { content: '低赞评论。', likeCount: 1 } },
+                { review: { content: '最高赞评论。', likeCount: 18 } },
+                { review: { content: '次高赞评论。', likesCount: 9 } },
+                { review: { content: '第三名评论。', likeCount: 4 } }
               ]
             }
           ]
@@ -197,8 +199,9 @@ test('returns snapshot id and structured signal panel for a valid reading snapsh
     assert.doesNotMatch(JSON.stringify(body.agentRequest), /test-key|dev-token/);
     assert.equal(body.signalPanel.bestBookmarks[0].markText, '值得精读的关键段落');
     assert.deepEqual(body.signalPanel.bookmarkReviews[0].comments, [
-      '这段是本章核心。',
-      '这里和全书主题呼应。'
+      { content: '最高赞评论。', likeCount: 18 },
+      { content: '次高赞评论。', likeCount: 9 },
+      { content: '第三名评论。', likeCount: 4 }
     ]);
     assert.equal(body.signalPanel.bookContext.bookInfo.author, '测试作者');
     assert.equal(body.signalPanel.bookContext.bookInfo.newRating, 86);
@@ -214,6 +217,7 @@ test('returns snapshot id and structured signal panel for a valid reading snapsh
       '/review/list'
     ]);
     assert.equal(calls.find((call) => call.apiName === '/book/bestbookmarks').params.chapterUid, 101);
+    assert.equal(calls.find((call) => call.apiName === '/book/readreviews').params.reviews[0].count, 20);
   });
 });
 
