@@ -129,7 +129,7 @@ function buildCaptureInput(snapshot, signalPanel) {
 
 function parseReadingJudgement(raw) {
   const parsed = parseJsonObject(raw);
-  const recommendation = normalizeRecommendation(parsed.recommendation || parsed.conclusion);
+  const recommendation = parseRecommendation(parsed.recommendation || parsed.conclusion);
 
   return {
     recommendation,
@@ -178,14 +178,25 @@ function parseJsonObject(raw) {
     return JSON.parse(raw);
   } catch {
     const match = String(raw || '').match(/\{[\s\S]*\}/);
-    if (!match) return {};
+    if (!match) {
+      throw new Error('Invalid reading judgement JSON');
+    }
 
     try {
       return JSON.parse(match[0]);
     } catch {
-      return {};
+      throw new Error('Invalid reading judgement JSON');
     }
   }
+}
+
+function parseRecommendation(value) {
+  if (!value) {
+    throw new Error('Missing reading judgement recommendation');
+  }
+  if (value === 'worth_deep_read') return 'deep_read';
+  if (RECOMMENDATIONS.has(value)) return value;
+  throw new Error(`Invalid reading judgement recommendation: ${value}`);
 }
 
 function normalizeRecommendation(value) {

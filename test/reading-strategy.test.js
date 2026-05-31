@@ -157,6 +157,17 @@ test('parseReadingJudgement limits list fields', () => {
   assert.deepEqual(judgement.questionsForAuthor, ['一', '二', '三', '四', '五']);
 });
 
+test('parseReadingJudgement rejects invalid model output', () => {
+  assert.throws(() => parseReadingJudgement('not-json'), /Invalid reading judgement JSON/);
+  assert.throws(() => parseReadingJudgement('{}'), /Missing reading judgement recommendation/);
+  assert.throws(() => parseReadingJudgement(JSON.stringify({
+    reasons: ['缺少推荐']
+  })), /Missing reading judgement recommendation/);
+  assert.throws(() => parseReadingJudgement(JSON.stringify({
+    recommendation: 'maybe_read'
+  })), /Invalid reading judgement recommendation/);
+});
+
 test('parseReadingJudgement accepts legacy conclusion labels as new recommendations', () => {
   assert.equal(parseReadingJudgement(JSON.stringify({
     recommendation: 'worth_deep_read'
