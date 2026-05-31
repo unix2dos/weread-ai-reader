@@ -1,7 +1,7 @@
 const crypto = require('node:crypto');
 const express = require('express');
 
-const { PROMPT_VERSION } = require('./readingStrategy');
+const { PROMPT_VERSION, toLegacyJudgement } = require('./readingStrategy');
 const { buildSignalPanel } = require('./signalBuilder');
 
 function createApp({ config, wereadClient, llmClient, logger = console }) {
@@ -117,7 +117,7 @@ function createApp({ config, wereadClient, llmClient, logger = console }) {
         } else if (event.type === 'complete') {
           completedResult = {
             readingJudgement: event.readingJudgement || null,
-            judgement: event.judgement || event.readingJudgement || {}
+            judgement: event.judgement || (event.readingJudgement ? toLegacyJudgement(event.readingJudgement) : {})
           };
           writeSse(res, 'complete', completedResult);
         }

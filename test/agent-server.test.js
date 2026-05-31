@@ -687,3 +687,57 @@ test('caches reading judgement with compatible legacy judgement', async () => {
     assert.match(secondText, /"judgement":\{"conclusion":"quick_read"/);
   });
 });
+
+test('maps reading judgement to legacy judgement when stream omits legacy payload', async () => {
+  let streamCount = 0;
+  const app = createApp({
+    config: { clientToken: 'dev-token' },
+    wereadClient: createStubWeReadClient([]),
+    llmClient: {
+      async *streamShortJudgement() {
+        streamCount += 1;
+        yield {
+          type: 'complete',
+          readingJudgement: {
+            recommendation: 'deep_read',
+            masteryScore: {
+              overall: 88,
+              informationDensity: 92,
+              structuralImportance: 86,
+              skipRisk: 8
+            },
+            nextMustKnow: ['掌握核心概念'],
+            reasons: ['本章集中解释关键框架。'],
+            keyPassages: ['核心框架段落'],
+            questionsForAuthor: ['这个框架如何约束后文？'],
+            readerPerspective: '读者认为这里是主线。',
+            readingAdvice: '精读核心框架段落。'
+          }
+        };
+      }
+    },
+    logger: { info() {}, warn() {}, error() {} }
+  });
+
+  await withServer(app, async (baseUrl) => {
+    const snapshotResp = await fetch(`${baseUrl}/api/reading-snapshots`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(createSnapshot())
+    });
+    const { snapshotId } = await snapshotResp.json();
+
+    const first = await fetch(`${baseUrl}/api/reading-snapshots/${snapshotId}/judgement/stream?clientToken=dev-token`);
+    const firstText = await first.text();
+    const second = await fetch(`${baseUrl}/api/reading-snapshots/${snapshotId}/judgement/stream?clientToken=dev-token`);
+    const secondText = await second.text();
+
+    assert.equal(streamCount, 1);
+    assert.match(firstText, /"readingJudgement":\{"recommendation":"deep_read"/);
+    assert.match(firstText, /"judgement":\{"conclusion":"worth_deep_read"/);
+    assert.doesNotMatch(firstText, /"judgement":\{"recommendation":"deep_read"/);
+    assert.match(secondText, /"readingJudgement":\{"recommendation":"deep_read"/);
+    assert.match(secondText, /"judgement":\{"conclusion":"worth_deep_read"/);
+    assert.doesNotMatch(secondText, /"judgement":\{"recommendation":"deep_read"/);
+  });
+});
