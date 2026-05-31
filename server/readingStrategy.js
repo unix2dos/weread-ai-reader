@@ -6,6 +6,17 @@ const LEGACY_CONCLUSIONS = {
   quick_read: 'quick_read',
   skip_read: 'skip_read'
 };
+const MAX_OUTPUT_TOKENS = 1200;
+const SIGNAL_LIMITS = {
+  bestBookmarks: 8,
+  bookmarkReviews: 6,
+  bookmarkReviewComments: 2,
+  bookReviews: 2,
+  personalItems: 6,
+  personalReviews: 2,
+  shortText: 180,
+  reviewText: 240
+};
 
 function buildRequestBody({
   snapshot,
@@ -16,6 +27,7 @@ function buildRequestBody({
     model,
     stream: true,
     temperature: 0.2,
+    max_tokens: MAX_OUTPUT_TOKENS,
     messages: buildMessages({ snapshot, signalPanel })
   };
 }
@@ -51,6 +63,7 @@ function buildStrategyInput({
   signalPanel
 }) {
   const capture = buildCaptureInput(snapshot, signalPanel);
+  const signals = buildSignalsInput(signalPanel);
 
   return {
     promptVersion: PROMPT_VERSION,
@@ -66,20 +79,7 @@ function buildStrategyInput({
       capture,
       chapterText: snapshot.chapterText || ''
     },
-    signals: {
-      bookContext: signalPanel.bookContext || {},
-      publicSignals: signalPanel.publicSignals || {
-        bestBookmarks: signalPanel.bestBookmarks || [],
-        bookmarkReviews: signalPanel.bookmarkReviews || [],
-        bookReviews: signalPanel.bookReviews || []
-      },
-      personalSignals: signalPanel.personalSignals || {
-        enabled: false,
-        bookmarks: [],
-        reviews: [],
-        underlines: []
-      }
-    },
+    signals,
     outputShape: {
       recommendation: 'deep_read | quick_read | skip_read',
       masteryScore: {
@@ -95,6 +95,51 @@ function buildStrategyInput({
       readerPerspective: '评论中的共识、争议、误读或补充；没有评论信号时说明暂无足够公开评论信号',
       readingAdvice: '接下来精读、快读或跳读的具体方式'
     }
+  };
+}
+
+function buildSignalsInput(signalPanel) {
+  return {
+    bookContext: trimObjectStrings(signalPanel.bookContext || {}, SIGNAL_LIMITS.reviewText),
+    publicSignals: buildPublicSignalsInput(signalPanel),
+    personalSignals: buildPersonalSignalsInput(signalPanel.personalSignals)
+  };
+}
+
+function buildPublicSignalsInput(signalPanel) {
+  const publicSignals = signalPanel.publicSignals || {
+    bestBookmarks: signalPanel.bestBookmarks || [],
+    bookmarkReviews: signalPanel.bookmarkReviews || [],
+    bookReviews: signalPanel.bookReviews || []
+  };
+
+  return {
+    bestBookmarks: limitArray(publicSignals.bestBookmarks, SIGNAL_LIMITS.bestBookmarks, (item) => (
+      trimObjectStrings(item, SIGNAL_LIMITS.shortText)
+    )),
+    bookmarkReviews: limitArray(publicSignals.bookmarkReviews, SIGNAL_LIMITS.bookmarkReviews, (item) => ({
+      ...trimObjectStrings(item, SIGNAL_LIMITS.shortText),
+      comments: normalizeStringArray(item?.comments, SIGNAL_LIMITS.bookmarkReviewComments)
+        .map((comment) => truncateText(comment, SIGNAL_LIMITS.shortText))
+    })),
+    bookReviews: limitArray(publicSignals.bookReviews, SIGNAL_LIMITS.bookReviews, (item) => (
+      trimObjectStrings(item, SIGNAL_LIMITS.reviewText)
+    ))
+  };
+}
+
+function buildPersonalSignalsInput(personalSignals = {}) {
+  return {
+    enabled: Boolean(personalSignals.enabled),
+    bookmarks: limitArray(personalSignals.bookmarks, SIGNAL_LIMITS.personalItems, (item) => (
+      trimObjectStrings(item, SIGNAL_LIMITS.shortText)
+    )),
+    reviews: limitArray(personalSignals.reviews, SIGNAL_LIMITS.personalReviews, (item) => (
+      trimObjectStrings(item, SIGNAL_LIMITS.reviewText)
+    )),
+    underlines: limitArray(personalSignals.underlines, SIGNAL_LIMITS.personalItems, (item) => (
+      trimObjectStrings(item, SIGNAL_LIMITS.shortText)
+    ))
   };
 }
 
@@ -244,6 +289,28 @@ function assertNonEmptyString(value, field) {
 function hasFiniteScore(value) {
   if (value === null || value === undefined || value === '') return false;
   return Number.isFinite(Number(value));
+}
+
+function limitArray(value, limit, mapper) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, limit).map(mapper);
+}
+
+function trimObjectStrings(value, maxLength) {
+  if (Array.isArray(value)) {
+    return value.map((item) => trimObjectStrings(item, maxLength));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, trimObjectStrings(item, maxLength)])
+    );
+  }
+  return typeof value === 'string' ? truncateText(value, maxLength) : value;
+}
+
+function truncateText(value, maxLength) {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
 }
 
 function clampScore(value) {

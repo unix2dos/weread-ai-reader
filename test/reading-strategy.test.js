@@ -126,11 +126,48 @@ test('buildRequestBody asks for JSON-only mastery judgement', () => {
 
   assert.equal(body.model, 'deepseek-v4-flash');
   assert.equal(body.stream, true);
+  assert.equal(body.max_tokens, 1200);
   assert.match(body.messages[0].content, /掌握价值分/);
   assert.match(body.messages[0].content, /追问问题只给问题/);
   assert.match(body.messages[1].content, /questionsForAuthor/);
   assert.match(body.messages[1].content, /"signals":\{/);
   assert.match(body.messages[1].content, /bookContext/);
+});
+
+test('buildStrategyInput caps signal volume for fast judgement', () => {
+  const longText = '这是一段很长的评论。'.repeat(80);
+  const signalPanel = createSignalPanel({
+    publicSignals: {
+      bestBookmarks: Array.from({ length: 20 }, (_, index) => ({
+        range: `${index}-${index + 1}`,
+        markText: longText,
+        totalCount: 1000 - index,
+        chapterUid: 101
+      })),
+      bookmarkReviews: Array.from({ length: 20 }, (_, index) => ({
+        range: `${index}-${index + 1}`,
+        totalCount: 10,
+        comments: [longText, longText, longText]
+      })),
+      bookReviews: Array.from({ length: 8 }, (_, index) => ({
+        content: `${index}${longText}`,
+        likeCount: index
+      }))
+    }
+  });
+
+  const input = buildStrategyInput({
+    snapshot: createSnapshot(),
+    signalPanel
+  });
+
+  assert.equal(input.signals.publicSignals.bestBookmarks.length, 8);
+  assert.equal(input.signals.publicSignals.bookmarkReviews.length, 6);
+  assert.equal(input.signals.publicSignals.bookmarkReviews[0].comments.length, 2);
+  assert.equal(input.signals.publicSignals.bookReviews.length, 2);
+  assert.ok(input.signals.publicSignals.bestBookmarks[0].markText.length <= 180);
+  assert.ok(input.signals.publicSignals.bookmarkReviews[0].comments[0].length <= 180);
+  assert.ok(input.signals.publicSignals.bookReviews[0].content.length <= 240);
 });
 
 test('parseReadingJudgement normalizes score ranges and arrays', () => {
