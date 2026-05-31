@@ -178,6 +178,23 @@ body {
   margin-bottom: 6px;
 }
 
+.summary-sublist li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.summary-comment-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.summary-comment-like {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .summary-analysis-content {
   white-space: pre-wrap;
 }

@@ -117,7 +117,7 @@ Chrome 扩展先 `POST /api/reading-snapshots` 上传阅读快照，Agent 服务
     "publicSignals": {
       "bookReviews": [{ "content": "string", "likeCount": 0 }],
       "bestBookmarks": [{ "range": "1-20", "markText": "string", "totalCount": 12 }],
-      "bookmarkReviews": [{ "range": "1-20", "totalCount": 3, "comments": ["string"] }]
+      "bookmarkReviews": [{ "range": "1-20", "totalCount": 3, "comments": [{ "content": "string", "likeCount": 0 }] }]
     },
     "personalSignals": {
       "enabled": false,
@@ -127,7 +127,7 @@ Chrome 扩展先 `POST /api/reading-snapshots` 上传阅读快照，Agent 服务
     },
     "bookReviews": [{ "content": "string", "likeCount": 0 }],
     "bestBookmarks": [{ "range": "1-20", "markText": "string", "totalCount": 12 }],
-    "bookmarkReviews": [{ "range": "1-20", "totalCount": 3, "comments": ["string"] }],
+    "bookmarkReviews": [{ "range": "1-20", "totalCount": 3, "comments": [{ "content": "string", "likeCount": 0 }] }],
     "debug": {
       "skillCalls": ["/book/chapterinfo", "/book/info", "/book/getprogress", "/book/bestbookmarks", "/book/readreviews", "/review/list"],
       "warnings": []

@@ -1,0 +1,9 @@
+node_modules/
+npm-debug.log
+.env
+.omx/
+.git/
+.DS_Store
+*.log
+reports/
+docs/images/

@@ -1,3 +1,6 @@
+const BOOKMARK_REVIEW_COMMENT_FETCH_COUNT = 20;
+const BOOKMARK_REVIEW_COMMENT_DISPLAY_COUNT = 3;
+
 async function buildSignalPanel(wereadClient, snapshot, options = {}) {
   const logger = options.logger || console;
   const enablePersonalSignals = options.enablePersonalSignals === true;
@@ -71,7 +74,7 @@ async function buildSignalPanel(wereadClient, snapshot, options = {}) {
       reviews: bestBookmarks.slice(0, 8).map((bookmark) => ({
         range: bookmark.range,
         maxIdx: 0,
-        count: 5
+        count: BOOKMARK_REVIEW_COMMENT_FETCH_COUNT
       }))
     }).catch((err) => {
       warnings.push(`划线评论获取失败: ${err.message}`);
@@ -272,11 +275,26 @@ function normalizeBookmarkReviews(reviews) {
   return reviews.map((item) => ({
     range: String(item.range || ''),
     totalCount: Number(item.totalCount || 0),
-    comments: (item.pageReviews || [])
-      .map((pageReview) => pageReview.review && pageReview.review.content)
-      .filter(Boolean)
-      .slice(0, 5)
+    comments: normalizeBookmarkReviewComments(item.pageReviews || [])
   })).filter((item) => item.range);
+}
+
+function normalizeBookmarkReviewComments(pageReviews) {
+  return pageReviews
+    .map((pageReview, index) => {
+      const review = pageReview && (pageReview.review && (pageReview.review.review || pageReview.review));
+      const source = review || pageReview || {};
+      const likeCount = Number(source.likeCount ?? source.likesCount ?? 0);
+      return {
+        content: String(source.content || ''),
+        likeCount: Number.isFinite(likeCount) ? likeCount : 0,
+        index
+      };
+    })
+    .filter((item) => item.content)
+    .sort((a, b) => b.likeCount - a.likeCount || a.index - b.index)
+    .slice(0, BOOKMARK_REVIEW_COMMENT_DISPLAY_COUNT)
+    .map(({ content, likeCount }) => ({ content, likeCount }));
 }
 
 function normalizeBookReviews(reviews) {

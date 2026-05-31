@@ -12,7 +12,7 @@
 
 阅读页不再注入可见 AI 小框，避免遮挡或压缩正文。扩展工具栏 popup 是控制台：打开或聚焦独立 AI 摘要窗口、触发“本章判断”、查看短状态、进入设置和清理缓存。按 `Option+Q` 也会打开或聚焦独立 AI 摘要窗口。
 
-AI 摘要窗口展示极简首屏：精读/快读/跳读结论、掌握价值分、最多 3 个最需要掌握点、最多 2 个带着读的问题、一句阅读动作，以及 Agent 归纳出的读者视角、理由和重点段落。WeRead 原始信号单独放在默认展开的“阅读信号”框里；“调试”默认折叠，只包含请求摘要和完整请求。窗口内也保留一个次级“本章判断”按钮。扩展图标 badge 只显示短状态：`…` 表示生成中，`OK` 表示完成，`!` 表示失败。
+AI 摘要窗口展示极简首屏：精读/快读/跳读结论、掌握价值分、最多 3 个最需要掌握点、最多 2 个带着读的问题、一句阅读动作，以及 Agent 归纳出的读者视角、理由和重点段落。当前章节的 WeRead 原始信号放在默认展开的“阅读信号”框里；“整本书评价背景”和“调试”默认折叠，其中“调试”只包含请求摘要和完整请求。窗口内也保留一个次级“本章判断”按钮。扩展图标 badge 只显示短状态：`…` 表示生成中，`OK` 表示完成，`!` 表示失败。
 
 设置页配置本地 Agent 服务地址和 `clientToken`，clientToken 可以通过小眼睛临时显示。
 
@@ -56,19 +56,36 @@ flowchart TD
 
 ## 启动服务器
 
+推荐用 `.env` + 一键脚本启动。第一次运行脚本时，如果没有 `.env`，会自动从 `.env.example` 创建一份模板。
+
 ```bash
-npm install
+cp .env.example .env
+```
 
-export WEREAD_API_KEY="wrk-..."
-export LLM_API_KEY="sk-..."
-export LLM_API_BASE="https://opencode.ai/zen/go/v1"
-export LLM_MODEL="mimo-v2.5"
-export LLM_FALLBACK_MODELS="kimi-k2.6,kimi-k2.5"
-export CLIENT_TOKEN="change-me"
-export ENABLE_PERSONAL_SIGNALS="false"
-export PORT="19763"
+编辑 `.env`，至少填入：
 
-npm start
+```bash
+WEREAD_API_KEY=wrk-...
+LLM_API_KEY=sk-...
+```
+
+本机启动：
+
+```bash
+./scripts/start-server.sh
+```
+
+Docker 启动：
+
+```bash
+./scripts/start-server.sh --docker
+```
+
+也可以使用 npm 快捷命令：
+
+```bash
+npm run server
+npm run server:docker
 ```
 
 `LLM_MODEL` 是首选模型。`LLM_FALLBACK_MODELS` 是可选的逗号分隔列表；当首选模型遇到 429、`fetch failed`、空输出或结构化解析失败时，Agent 会继续用同一个 `LLM_API_BASE` 和 `LLM_API_KEY` 尝试下一个模型。这个 fallback 只在当前 OpenCode Go 兼容接口内部切换模型，不切换到其它 provider 或其它密钥。
@@ -95,7 +112,7 @@ curl http://127.0.0.1:19763/health
 2. 点击 Chrome 工具栏里的 WeRead AI 扩展图标。
 3. 在 popup 中点击“打开摘要窗口”，或按 `Option+Q` 打开独立 AI 摘要窗口。
 4. 翻到新章节会自动上传当前阅读快照；需要手动刷新时，在 popup 或摘要窗口点击“本章判断”。
-5. 摘要窗口流式显示阅读判断；默认展开的“阅读信号”展示热门划线和整本书评价背景，默认折叠的“调试”展示请求摘要和完整请求；扩展图标 badge 同步显示生成、完成或失败状态。
+5. 摘要窗口流式显示阅读判断；默认展开的“阅读信号”展示正文采集和热门划线，默认折叠的“整本书评价背景”展示全书书评，默认折叠的“调试”展示请求摘要和完整请求；扩展图标 badge 同步显示生成、完成或失败状态。
 
 LLM 返回的阅读判断会包含精读/快读/跳读建议、掌握价值分、接下来最需要掌握的内容、追问问题、一句阅读动作、读者视角、理由和重点段落。
 

@@ -33,12 +33,12 @@ function createSignalPanel(overrides = {}) {
     },
     publicSignals: {
       bestBookmarks: [{ range: '1-20', markText: '核心概念', totalCount: 12, chapterUid: 101 }],
-      bookmarkReviews: [{ range: '1-20', totalCount: 1, comments: ['这段是后面理解的基础。'] }],
+      bookmarkReviews: [{ range: '1-20', totalCount: 1, comments: [{ content: '这段是后面理解的基础。', likeCount: 8 }] }],
       bookReviews: [{ content: '结构清楚。', likeCount: 4 }]
     },
     personalSignals: { enabled: false, bookmarks: [], reviews: [], underlines: [] },
     bestBookmarks: [{ range: '1-20', markText: '核心概念', totalCount: 12, chapterUid: 101 }],
-    bookmarkReviews: [{ range: '1-20', totalCount: 1, comments: ['这段是后面理解的基础。'] }],
+    bookmarkReviews: [{ range: '1-20', totalCount: 1, comments: [{ content: '这段是后面理解的基础。', likeCount: 8 }] }],
     bookReviews: [{ content: '结构清楚。', likeCount: 4 }],
     debug: { resolvedBookId: 'book-1', warnings: [] },
     ...overrides
@@ -154,7 +154,11 @@ test('buildStrategyInput caps signal volume for fast judgement', () => {
       bookmarkReviews: Array.from({ length: 20 }, (_, index) => ({
         range: `${index}-${index + 1}`,
         totalCount: 10,
-        comments: [longText, longText, longText]
+        comments: [
+          { content: longText, likeCount: 3 },
+          { content: longText, likeCount: 2 },
+          { content: longText, likeCount: 1 }
+        ]
       })),
       bookReviews: Array.from({ length: 8 }, (_, index) => ({
         content: `${index}${longText}`,
@@ -173,7 +177,8 @@ test('buildStrategyInput caps signal volume for fast judgement', () => {
   assert.equal(input.signals.publicSignals.bookmarkReviews[0].comments.length, 2);
   assert.equal(input.signals.publicSignals.bookReviews.length, 2);
   assert.ok(input.signals.publicSignals.bestBookmarks[0].markText.length <= 180);
-  assert.ok(input.signals.publicSignals.bookmarkReviews[0].comments[0].length <= 180);
+  assert.ok(input.signals.publicSignals.bookmarkReviews[0].comments[0].content.length <= 180);
+  assert.equal(input.signals.publicSignals.bookmarkReviews[0].comments[0].likeCount, 3);
   assert.ok(input.signals.publicSignals.bookReviews[0].content.length <= 240);
 });
 

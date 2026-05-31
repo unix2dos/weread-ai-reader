@@ -203,6 +203,15 @@ test('highlight evidence renders comments under the matching highlight range', (
   assert.match(summaryJs, /reviewsByRange\.get\(item\.range\)/);
 });
 
+test('highlight comments render like counts from sorted comment objects', () => {
+  assert.match(summaryJs, /function renderHighlightComment\(comment\)/);
+  assert.match(summaryJs, /getCommentContent\(comment\)/);
+  assert.match(summaryJs, /getCommentLikeCount\(comment\)/);
+  assert.match(summaryJs, /hasCommentLikeCount\(comment\)/);
+  assert.match(summaryJs, /\$\{likeCount\}赞/);
+  assert.match(summaryCss, /\.summary-comment-like/);
+});
+
 test('same-chapter capture growth does not automatically rerun judgement', () => {
   assert.match(contentJs, /function updateSameChapterCaptureStatus\(/);
   assert.match(contentJs, /same_chapter_capture_updated/);
