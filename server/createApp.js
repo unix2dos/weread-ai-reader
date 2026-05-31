@@ -39,11 +39,7 @@ function createApp({ config, wereadClient, llmClient, logger = console }) {
     if (cachedSnapshotId && snapshots.has(cachedSnapshotId)) {
       const cached = snapshots.get(cachedSnapshotId);
       logger.info('reading_snapshot_cache_hit', buildSnapshotLog(cached.snapshot, cached.signalPanel, { snapshotId: cachedSnapshotId }));
-      res.json({
-        snapshotId: cachedSnapshotId,
-        cache: { hit: true },
-        signalPanel: cached.signalPanel
-      });
+      res.json(buildSnapshotResponse(cachedSnapshotId, cached, { hit: true }, llmClient));
       return;
     }
 
@@ -52,21 +48,18 @@ function createApp({ config, wereadClient, llmClient, logger = console }) {
     try {
       const signalPanel = await buildSignalPanel(wereadClient, normalizedSnapshot, logger);
       const skillSignalVersion = hashJson(signalPanel);
-      snapshots.set(snapshotId, {
+      const record = {
         snapshot: normalizedSnapshot,
         signalPanel,
         skillSignalVersion,
         promptVersion: PROMPT_VERSION
-      });
+      };
+      snapshots.set(snapshotId, record);
       snapshotCache.set(snapshotCacheKey, snapshotId);
 
       logger.info('reading_snapshot_received', buildSnapshotLog(normalizedSnapshot, signalPanel, { snapshotId }));
 
-      res.json({
-        snapshotId,
-        cache: { hit: false },
-        signalPanel
-      });
+      res.json(buildSnapshotResponse(snapshotId, record, { hit: false }, llmClient));
     } catch (err) {
       logger.error('reading_snapshot_failed', { snapshotId, message: err.message });
       res.status(502).json({
@@ -408,6 +401,40 @@ function buildJudgementCacheKey(record) {
     record.skillSignalVersion,
     record.promptVersion
   ].join(':');
+}
+
+function buildSnapshotResponse(snapshotId, record, cache, llmClient) {
+  return {
+    snapshotId,
+    cache,
+    signalPanel: record.signalPanel,
+    agentRequest: buildAgentRequestDebug(llmClient, record)
+  };
+}
+
+function buildAgentRequestDebug(llmClient, record) {
+  if (typeof llmClient.buildRequestDebug !== 'function') {
+    return {
+      promptVersion: record.promptVersion,
+      input: buildLlmInputLog(record),
+      note: 'llmClient 未暴露完整请求调试接口。'
+    };
+  }
+
+  try {
+    return llmClient.buildRequestDebug({
+      snapshot: record.snapshot,
+      signalPanel: record.signalPanel,
+      promptVersion: record.promptVersion
+    });
+  } catch (err) {
+    return {
+      promptVersion: record.promptVersion,
+      input: buildLlmInputLog(record),
+      error: err.message,
+      note: '完整请求调试生成失败，已退回摘要输入。'
+    };
+  }
 }
 
 function hashJson(value) {

@@ -4,6 +4,7 @@ const http = require('node:http');
 const test = require('node:test');
 
 const { createApp } = require('../server/createApp');
+const { createLlmClient } = require('../server/llmClient');
 
 function createSnapshot(overrides = {}) {
   return {
@@ -107,7 +108,14 @@ test('returns snapshot id and structured signal panel for a valid reading snapsh
   const app = createApp({
     config: { clientToken: 'dev-token' },
     wereadClient: createStubWeReadClient(calls),
-    llmClient: { streamShortJudgement: async function* () {} },
+    llmClient: createLlmClient({
+      apiKey: 'test-key',
+      apiBase: 'https://llm.example/v1',
+      model: 'deepseek-v4-flash',
+      fetchImpl: async () => {
+        throw new Error('fetch should not be called while storing a snapshot');
+      }
+    }),
     logger: { info() {}, warn() {}, error() {} }
   });
 
@@ -124,6 +132,11 @@ test('returns snapshot id and structured signal panel for a valid reading snapsh
     assert.match(body.snapshotId, /^snap_/);
     assert.equal(body.cache.hit, false);
     assert.equal(body.signalPanel.chapter.chapterUid, 101);
+    assert.equal(body.agentRequest.url, 'https://llm.example/v1/chat/completions');
+    assert.equal(body.agentRequest.headers.Authorization, 'Bearer [hidden]');
+    assert.equal(body.agentRequest.body.model, 'deepseek-v4-flash');
+    assert.match(body.agentRequest.body.messages[1].content, /这一章讨论了如何判断一章是否值得精读/);
+    assert.doesNotMatch(JSON.stringify(body.agentRequest), /test-key|dev-token/);
     assert.equal(body.signalPanel.bestBookmarks[0].markText, '值得精读的关键段落');
     assert.deepEqual(body.signalPanel.bookmarkReviews[0].comments, [
       '这段是本章核心。',

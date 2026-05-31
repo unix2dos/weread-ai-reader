@@ -13,19 +13,14 @@ function createLlmClient({
         throw new Error('LLM_API_KEY is not configured');
       }
 
-      const messages = buildMessages(snapshot, signalPanel, promptVersion);
+      const requestBody = buildRequestBody(snapshot, signalPanel, promptVersion, model);
       const resp = await fetchImpl(`${apiBase}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`
         },
-        body: JSON.stringify({
-          model,
-          stream: true,
-          temperature: 0.2,
-          messages
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (!resp.ok) {
@@ -43,7 +38,29 @@ function createLlmClient({
         type: 'complete',
         judgement: parseJudgement(raw)
       };
+    },
+
+    buildRequestDebug({ snapshot, signalPanel, promptVersion }) {
+      return {
+        method: 'POST',
+        url: `${apiBase}/chat/completions`,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer [hidden]'
+        },
+        body: buildRequestBody(snapshot, signalPanel, promptVersion, model),
+        note: 'Authorization 使用服务器上的 LLM_API_KEY；调试输出故意隐藏。'
+      };
     }
+  };
+}
+
+function buildRequestBody(snapshot, signalPanel, promptVersion, model) {
+  return {
+    model,
+    stream: true,
+    temperature: 0.2,
+    messages: buildMessages(snapshot, signalPanel, promptVersion)
   };
 }
 
@@ -149,6 +166,7 @@ function normalizeStringArray(value, limit) {
 
 module.exports = {
   createLlmClient,
+  buildRequestBody,
   buildMessages,
   parseJudgement
 };

@@ -260,6 +260,43 @@
   user-select: none;
 }
 
+.wap-debug-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.wap-debug-copy {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.wap-debug-copy:hover:not(:disabled) {
+  background: #eef2f7;
+}
+
+.wap-debug-copy:disabled {
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.wap-debug-copy-status {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.wap-debug-label {
+  margin-top: 8px;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
 .wap-debug-content {
   max-height: 160px;
   overflow: auto;
@@ -268,6 +305,28 @@
   border-radius: 6px;
   background: #1f2933;
   color: #d9e2ec;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.wap-full-request {
+  margin-top: 8px;
+}
+
+.wap-full-request summary {
+  color: #475569;
+  font-weight: 600;
+}
+
+.wap-full-request-content {
+  max-height: 260px;
+  overflow: auto;
+  margin: 8px 0 0;
+  padding: 8px;
+  border-radius: 6px;
+  background: #111827;
+  color: #e5e7eb;
   font-size: 11px;
   line-height: 1.45;
   white-space: pre-wrap;

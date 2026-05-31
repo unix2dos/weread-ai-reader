@@ -9,6 +9,7 @@
   let judgementPort = null;
   let canvasTextItems = [];
   let lastCanvasSummary = null;
+  let lastFullRequestText = '';
 
   const MAX_CANVAS_TEXT_ITEMS = 12000;
   const CANVAS_BATCH_EVENT = '__wereadAiCanvasTextBatch';
@@ -40,7 +41,16 @@
         <div class="wap-judgement"></div>
         <details class="wap-debug">
           <summary>调试</summary>
+          <div class="wap-debug-actions">
+            <button class="wap-debug-copy" type="button" disabled>复制完整请求</button>
+            <span class="wap-debug-copy-status"></span>
+          </div>
+          <div class="wap-debug-label">摘要</div>
           <pre class="wap-debug-content">暂无请求</pre>
+          <details class="wap-full-request">
+            <summary>完整请求</summary>
+            <pre class="wap-full-request-content">暂无完整请求</pre>
+          </details>
         </details>
       </div>
     `;
@@ -57,6 +67,8 @@
       currentChapterText = '';
       handleNewChapter({ force: true });
     });
+
+    panel.querySelector('.wap-debug-copy').addEventListener('click', copyFullRequest);
 
     makeDraggable(panel, panel.querySelector('.wap-header'));
     log('log', '面板已创建');
@@ -219,6 +231,59 @@
     const el = document.querySelector('#weread-ai-panel .wap-debug-content');
     if (!el) return;
     el.textContent = JSON.stringify(summary, null, 2);
+  }
+
+  function updateFullRequestDebug(fullRequest) {
+    const contentEl = document.querySelector('#weread-ai-panel .wap-full-request-content');
+    const copyButton = document.querySelector('#weread-ai-panel .wap-debug-copy');
+    const statusEl = document.querySelector('#weread-ai-panel .wap-debug-copy-status');
+
+    if (!fullRequest) {
+      lastFullRequestText = '';
+      if (contentEl) contentEl.textContent = '暂无完整请求';
+      if (copyButton) copyButton.disabled = true;
+      if (statusEl) statusEl.textContent = '';
+      return;
+    }
+
+    lastFullRequestText = JSON.stringify(fullRequest, null, 2);
+    if (contentEl) contentEl.textContent = lastFullRequestText;
+    if (copyButton) copyButton.disabled = false;
+    if (statusEl) statusEl.textContent = '';
+  }
+
+  async function copyFullRequest() {
+    const statusEl = document.querySelector('#weread-ai-panel .wap-debug-copy-status');
+    if (!lastFullRequestText) {
+      if (statusEl) statusEl.textContent = '暂无内容';
+      return;
+    }
+
+    try {
+      await writeClipboard(lastFullRequestText);
+      if (statusEl) statusEl.textContent = '已复制';
+    } catch (err) {
+      log('warn', '复制完整请求失败', { message: err.message });
+      if (statusEl) statusEl.textContent = '复制失败';
+    }
+  }
+
+  async function writeClipboard(text) {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const ok = document.execCommand('copy');
+    textarea.remove();
+    if (!ok) throw new Error('execCommand copy failed');
   }
 
   function extractChapterContent() {
@@ -496,6 +561,7 @@
           canvas: lastCanvasSummary,
           bodyPreview: previewText(cleanText(document.body.innerText || ''))
         });
+        updateFullRequestDebug(null);
         return;
       }
 
@@ -522,6 +588,7 @@
       });
 
       updateDebug(buildClientDebug(snapshot));
+      updateFullRequestDebug(null);
       await uploadSnapshot(snapshot);
       log('log', `章节处理完成 #${extractionCount}`);
     } catch (err) {
@@ -566,6 +633,7 @@
     currentSnapshotId = body.snapshotId;
     updateSignalPanel(body.signalPanel);
     updateStatus('success', `已发送 ${snapshot.chapterText.length.toLocaleString()} 字，正在生成短判断...`);
+    updateFullRequestDebug(buildFullRequestDebug(snapshot, body));
     updateDebug({
       ...buildClientDebug(snapshot),
       snapshotId: body.snapshotId,
@@ -685,6 +753,149 @@
       capturedAt: snapshot.capturedAt,
       agentServerUrl: snapshot.agentServerUrl,
       canvas: lastCanvasSummary
+    };
+  }
+
+  function buildFullRequestDebug(snapshot, uploadResponse) {
+    const signalPanel = uploadResponse.signalPanel || {};
+    const resolvedBookId = signalPanel.debug?.resolvedBookId || snapshot.bookId;
+    const promptVersion = 'short-judgement-v1';
+    const agentInput = buildAgentInputDebug(snapshot, signalPanel, promptVersion, resolvedBookId);
+
+    return {
+      schema: 'weread-ai-agent-request-debug-v1',
+      generatedAt: new Date().toISOString(),
+      notes: [
+        'agentRequest 是服务器实际发给 LLM/Agent 的完整请求，Authorization 已隐藏。',
+        '浏览器发送给服务器时已经把 canvas 字符组织成 chapterText 字符串，不会逐字发送。',
+        'browserUploadSummary 和 extractionDebug 只保留摘要，避免同一份正文在调试块里重复出现。'
+      ],
+      browserUploadSummary: {
+        method: 'POST',
+        url: `${snapshot.agentServerUrl}/api/reading-snapshots`,
+        body: summarizeUploadBody(snapshot),
+        note: 'background.js 会在发送时追加 clientToken；此处故意不显示 token。'
+      },
+      judgementStreamRequest: {
+        method: 'GET',
+        url: `${snapshot.agentServerUrl}/api/reading-snapshots/${uploadResponse.snapshotId}/judgement/stream?clientToken=[hidden]`,
+        note: 'SSE 请求的 clientToken 故意隐藏。'
+      },
+      agentRequest: uploadResponse.agentRequest || buildAgentRequestFallback(agentInput),
+      agentInputSummary: summarizeAgentInput(agentInput),
+      responseMeta: {
+        snapshotId: uploadResponse.snapshotId,
+        cache: uploadResponse.cache,
+        skillCalls: signalPanel.debug?.skillCalls || [],
+        warnings: signalPanel.debug?.warnings || [],
+        rawBookId: signalPanel.debug?.rawBookId || snapshot.bookId,
+        resolvedBookId,
+        agentRequestSource: uploadResponse.agentRequest ? 'server' : 'client-fallback'
+      },
+      extractionDebug: {
+        source: snapshot.source,
+        contentHash: snapshot.contentHash,
+        chapterTextLength: snapshot.chapterText.length,
+        chapterTextPreview: previewText(snapshot.chapterText),
+        canvas: summarizeCanvasDebug(lastCanvasSummary)
+      }
+    };
+  }
+
+  function summarizeUploadBody(snapshot) {
+    const body = stripLocalOnlyFields(snapshot);
+    return {
+      ...body,
+      chapterText: `[${snapshot.chapterText.length} chars; exact text is inside agentRequest.body.messages[1].content]`,
+      chapterTextLength: snapshot.chapterText.length,
+      chapterTextPreview: previewText(snapshot.chapterText)
+    };
+  }
+
+  function summarizeAgentInput(agentInput) {
+    return {
+      promptVersion: agentInput.promptVersion,
+      task: agentInput.task,
+      chapter: {
+        ...agentInput.chapter,
+        chapterText: `[${agentInput.chapter.chapterText.length} chars; exact text is inside agentRequest.body.messages[1].content]`,
+        chapterTextLength: agentInput.chapter.chapterText.length,
+        chapterTextPreview: previewText(agentInput.chapter.chapterText)
+      },
+      signalCounts: {
+        bookReviews: agentInput.signals.bookReviews.length,
+        bestBookmarks: agentInput.signals.bestBookmarks.length,
+        bookmarkReviews: agentInput.signals.bookmarkReviews.length
+      },
+      outputShape: agentInput.outputShape
+    };
+  }
+
+  function summarizeCanvasDebug(summary) {
+    if (!summary) return null;
+    return {
+      itemCount: summary.itemCount,
+      candidateLineCount: summary.candidateLineCount,
+      candidateTextLength: summary.candidateTextLength,
+      candidatePreview: summary.candidatePreview
+    };
+  }
+
+  function buildAgentInputDebug(snapshot, signalPanel, promptVersion, resolvedBookId) {
+    return {
+      promptVersion,
+      task: '结合官方 WeRead Skill 信号和章节正文快照，判断当前章节是否值得精读。',
+      chapter: {
+        bookId: resolvedBookId,
+        rawBookId: snapshot.bookId,
+        bookTitle: snapshot.bookTitle,
+        chapterUid: signalPanel.chapter?.chapterUid || snapshot.chapterUid,
+        chapterTitle: snapshot.chapterTitle,
+        chapterText: snapshot.chapterText
+      },
+      signals: {
+        bookReviews: signalPanel.bookReviews || [],
+        bestBookmarks: signalPanel.bestBookmarks || [],
+        bookmarkReviews: signalPanel.bookmarkReviews || []
+      },
+      outputShape: {
+        conclusion: 'worth_deep_read | quick_read | skip_read',
+        reasons: ['2-3 条证据'],
+        keyPassages: ['3-5 条热门划线或正文片段'],
+        readerPerspective: '评论中的共识、争议、误读或补充',
+        readingAction: '接下来精读哪部分、带着什么问题读'
+      }
+    };
+  }
+
+  function buildAgentRequestFallback(agentInput) {
+    return {
+      method: 'POST',
+      url: '[server-generated-url-unavailable]',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer [hidden]'
+      },
+      body: {
+        stream: true,
+        temperature: 0.2,
+        messages: [
+          {
+            role: 'system',
+            content: [
+              '你是微信读书实时跟读助手，只做本章阅读价值判断。',
+              '必须输出 JSON，不要输出 Markdown。',
+              'JSON 字段：conclusion, reasons, keyPassages, readerPerspective, readingAction。',
+              'conclusion 只能是 worth_deep_read、quick_read 或 skip_read。'
+            ].join('\n')
+          },
+          {
+            role: 'user',
+            content: JSON.stringify(agentInput)
+          }
+        ]
+      },
+      note: '服务器未返回精确 LLM 请求时的前端兜底调试体。'
     };
   }
 
