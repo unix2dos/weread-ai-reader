@@ -36,7 +36,7 @@
     panel.innerHTML = `
       <div class="wap-header">
         <span class="wap-title">WeRead AI</span>
-        <span class="wap-collapsed-title">AI</span>
+        <button class="wap-collapsed-title" type="button" title="展开 WeRead AI" aria-label="展开 WeRead AI">AI</button>
         <div class="wap-controls">
           <button class="wap-btn wap-analyze" title="重新生成本章阅读判断">
             <span class="wap-refresh-icon" aria-hidden="true">↻</span>
@@ -67,14 +67,7 @@
 
     document.body.appendChild(panel);
 
-    const toggleButton = panel.querySelector('.wap-toggle');
-    toggleButton.addEventListener('click', () => {
-      if (panel.classList.contains('collapsed')) {
-        expandPanel(panel);
-      } else {
-        collapsePanel(panel);
-      }
-    });
+    installPanelToggle(panel);
 
     panel.querySelector('.wap-analyze').addEventListener('click', () => {
       currentSnapshotId = '';
@@ -89,6 +82,21 @@
     installKeyboardShortcuts(panel);
     makeDraggable(panel, panel.querySelector('.wap-header'));
     log('log', '面板已创建');
+  }
+
+  function installPanelToggle(panel) {
+    const toggleButton = panel.querySelector('.wap-toggle');
+    const collapsedTitle = panel.querySelector('.wap-collapsed-title');
+
+    toggleButton.addEventListener('click', () => {
+      if (panel.classList.contains('collapsed')) {
+        expandPanel(panel);
+      } else {
+        collapsePanel(panel);
+      }
+    });
+
+    collapsedTitle.addEventListener('click', () => expandPanel(panel));
   }
 
   function collapsePanel(panel) {
@@ -108,20 +116,22 @@
   }
 
   function installKeyboardShortcuts(panel) {
-    document.addEventListener('keydown', (event) => {
-      if (!(event.altKey && event.key.toLowerCase() === 'q')) return;
+    const handleShortcut = (event) => {
+      if (!(event.altKey && event.code === 'KeyQ')) return;
       const target = event.target;
       const tagName = target?.tagName?.toLowerCase();
       if (tagName === 'input' || tagName === 'textarea' || target?.isContentEditable) return;
       event.preventDefault();
       expandPanel(panel);
-    });
+    };
+
+    window.addEventListener('keydown', handleShortcut, true);
   }
 
   function makeDraggable(el, handle) {
     let isDragging = false, startX, startY, origX, origY;
     handle.addEventListener('mousedown', (e) => {
-      if (e.target.closest('.wap-btn')) return;
+      if (e.target.closest('button')) return;
       isDragging = true;
       startX = e.clientX;
       startY = e.clientY;

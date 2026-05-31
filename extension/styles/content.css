@@ -41,7 +41,9 @@
 }
 
 #weread-ai-panel.collapsed .wap-collapsed-title {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .wap-header {
@@ -64,10 +66,22 @@
 
 .wap-collapsed-title {
   display: none;
+  width: 100%;
+  min-height: 42px;
+  padding: 0;
+  border: none;
+  background: transparent;
   color: #2563eb;
   font-size: 14px;
   font-weight: 700;
   letter-spacing: 0;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.wap-collapsed-title:hover {
+  background: rgba(37, 99, 235, 0.06);
 }
 
 .wap-controls {
