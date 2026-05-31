@@ -3,7 +3,7 @@ const { createLlmClient } = require('./llmClient');
 const { createWeReadClient } = require('./wereadClient');
 
 const config = {
-  port: Number(process.env.PORT || 8787),
+  port: Number(process.env.PORT || 19763),
   clientToken: process.env.CLIENT_TOKEN || 'dev-token'
 };
 

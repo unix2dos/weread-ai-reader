@@ -6,6 +6,11 @@ const test = require('node:test');
 const repoRoot = path.join(__dirname, '..');
 const contentJs = fs.readFileSync(path.join(repoRoot, 'extension/content.js'), 'utf8');
 const contentCss = fs.readFileSync(path.join(repoRoot, 'extension/styles/content.css'), 'utf8');
+const backgroundJs = fs.readFileSync(path.join(repoRoot, 'extension/background.js'), 'utf8');
+const optionsJs = fs.readFileSync(path.join(repoRoot, 'extension/options.js'), 'utf8');
+const popupJs = fs.readFileSync(path.join(repoRoot, 'extension/popup.js'), 'utf8');
+const optionsHtml = fs.readFileSync(path.join(repoRoot, 'extension/options.html'), 'utf8');
+const manifestJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'extension/manifest.json'), 'utf8'));
 
 test('panel puts reading judgement before signal evidence', () => {
   const judgementIndex = contentJs.indexOf('<div class="wap-judgement"></div>');
@@ -29,4 +34,23 @@ test('highlight evidence renders comments under the matching highlight range', (
 test('same-chapter capture growth does not automatically rerun judgement', () => {
   assert.match(contentJs, /function updateSameChapterCaptureStatus\(/);
   assert.match(contentJs, /same_chapter_capture_updated/);
+});
+
+test('extension defaults use the less common local agent port', () => {
+  for (const source of [contentJs, backgroundJs, optionsJs, popupJs]) {
+    assert.match(source, /http:\/\/127\.0\.0\.1:19763/);
+  }
+});
+
+test('manifest declares extension icons and action icons', () => {
+  for (const size of ['16', '32', '48', '128']) {
+    assert.equal(manifestJson.icons[size], `icons/icon${size}.png`);
+    assert.equal(manifestJson.action.default_icon[size], `icons/icon${size}.png`);
+  }
+});
+
+test('options page can reveal and hide the client token', () => {
+  assert.match(optionsHtml, /id="client-token-toggle"/);
+  assert.match(optionsJs, /clientTokenInput\.type = showingToken \? 'text' : 'password'/);
+  assert.match(optionsJs, /clientTokenToggle\.setAttribute\('aria-label', showingToken \? '隐藏 clientToken' : '显示 clientToken'\)/);
 });

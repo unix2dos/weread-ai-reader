@@ -837,7 +837,7 @@
     return new Promise((resolve) => {
       chrome.runtime.sendMessage({ type: 'GET_AGENT_CONFIG' }, (response) => {
         if (chrome.runtime.lastError || !response?.agentConfig) {
-          resolve({ serverUrl: 'http://127.0.0.1:8787', clientToken: 'dev-token' });
+          resolve({ serverUrl: 'http://127.0.0.1:19763', clientToken: 'dev-token' });
           return;
         }
         resolve(response.agentConfig);
@@ -1140,7 +1140,7 @@
   }
 
   function normalizeServerUrl(value) {
-    return String(value || 'http://127.0.0.1:8787').replace(/\/+$/, '');
+    return String(value || 'http://127.0.0.1:19763').replace(/\/+$/, '');
   }
 
   function truncate(text, maxLength) {

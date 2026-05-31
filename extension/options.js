@@ -1,19 +1,33 @@
 const DEFAULT_AGENT_CONFIG = {
-  serverUrl: 'http://127.0.0.1:8787',
+  serverUrl: 'http://127.0.0.1:19763',
   clientToken: 'dev-token'
 };
+const OLD_DEFAULT_SERVER_URL = 'http://127.0.0.1:8787';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const serverUrlInput = document.getElementById('agent-server-url');
   const clientTokenInput = document.getElementById('client-token');
+  const clientTokenToggle = document.getElementById('client-token-toggle');
   const saveBtn = document.getElementById('save-btn');
   const testBtn = document.getElementById('test-btn');
   const status = document.getElementById('status');
 
   const result = await chrome.storage.local.get(['agentConfig']);
-  const agentConfig = { ...DEFAULT_AGENT_CONFIG, ...(result.agentConfig || {}) };
+  const agentConfig = normalizeAgentConfig(result.agentConfig);
+  if (!result.agentConfig || agentConfig.serverUrl !== result.agentConfig.serverUrl) {
+    await chrome.storage.local.set({ agentConfig });
+  }
   serverUrlInput.value = agentConfig.serverUrl;
   clientTokenInput.value = agentConfig.clientToken;
+
+  let showingToken = false;
+  clientTokenToggle.addEventListener('click', () => {
+    showingToken = !showingToken;
+    clientTokenInput.type = showingToken ? 'text' : 'password';
+    clientTokenToggle.classList.toggle('is-visible', showingToken);
+    clientTokenToggle.setAttribute('aria-label', showingToken ? '隐藏 clientToken' : '显示 clientToken');
+    clientTokenToggle.title = showingToken ? '隐藏 clientToken' : '显示 clientToken';
+  });
 
   saveBtn.addEventListener('click', async () => {
     await chrome.storage.local.set({
@@ -52,4 +66,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 function normalizeServerUrl(value) {
   return String(value || DEFAULT_AGENT_CONFIG.serverUrl).replace(/\/+$/, '');
+}
+
+function normalizeAgentConfig(agentConfig) {
+  const normalized = {
+    ...DEFAULT_AGENT_CONFIG,
+    ...(agentConfig || {})
+  };
+  if (normalized.serverUrl === OLD_DEFAULT_SERVER_URL) {
+    normalized.serverUrl = DEFAULT_AGENT_CONFIG.serverUrl;
+  }
+  return normalized;
 }

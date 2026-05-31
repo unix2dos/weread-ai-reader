@@ -63,6 +63,51 @@
       outline: none;
       border-color: #007AFF;
     }
+    .token-field {
+      position: relative;
+    }
+    .token-field input {
+      padding-right: 46px;
+    }
+    .token-toggle {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      transform: translateY(-50%);
+    }
+    .token-toggle-icon {
+      position: relative;
+      display: block;
+      width: 20px;
+      height: 13px;
+      margin: 0 auto;
+      border: 2px solid #777;
+      border-radius: 14px / 10px;
+      box-sizing: border-box;
+    }
+    .token-toggle-icon::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #777;
+      transform: translate(-50%, -50%);
+    }
+    .token-toggle.is-visible .token-toggle-icon {
+      border-color: #007AFF;
+    }
+    .token-toggle.is-visible .token-toggle-icon::after {
+      background: #007AFF;
+    }
     .help-text {
       margin-top: 6px;
       font-size: 12px;
@@ -119,13 +164,18 @@
       <div class="section-title">Agent 服务器</div>
       <div class="form-group">
         <label for="agent-server-url">Agent Server URL</label>
-        <input type="text" id="agent-server-url" placeholder="http://127.0.0.1:8787">
-        <div class="help-text">WeRead API Key 和 LLM API Key 都配置在服务器环境变量中，不保存在 Chrome 扩展里。</div>
+        <input type="text" id="agent-server-url" placeholder="http://127.0.0.1:19763">
+        <div class="help-text">这是本机 Node Agent 服务地址。WeRead API Key 和 LLM API Key 都配置在服务器环境变量中，不保存在 Chrome 扩展里。</div>
       </div>
       <div class="form-group">
         <label for="client-token">clientToken</label>
-        <input type="password" id="client-token" placeholder="dev-token">
-        <div class="help-text">V1 映射到单用户 Agent 服务器，未来可扩展为多用户访问令牌。</div>
+        <div class="token-field">
+          <input type="password" id="client-token" placeholder="dev-token" autocomplete="off">
+          <button type="button" class="token-toggle" id="client-token-toggle" aria-label="显示 clientToken" title="显示 clientToken">
+            <span class="token-toggle-icon" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="help-text">扩展访问 Agent 服务器的共享访问令牌，需要和服务器环境变量 CLIENT_TOKEN 一致；它不是 WeRead 或 LLM API Key。</div>
       </div>
     </div>
 

@@ -1,12 +1,14 @@
 const DEFAULT_AGENT_CONFIG = {
-  serverUrl: 'http://127.0.0.1:8787',
+  serverUrl: 'http://127.0.0.1:19763',
   clientToken: 'dev-token'
 };
+const OLD_DEFAULT_SERVER_URL = 'http://127.0.0.1:8787';
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.get(['agentConfig'], (result) => {
-    if (!result.agentConfig) {
-      chrome.storage.local.set({ agentConfig: DEFAULT_AGENT_CONFIG });
+    const agentConfig = normalizeAgentConfig(result.agentConfig);
+    if (!result.agentConfig || agentConfig.serverUrl !== result.agentConfig.serverUrl) {
+      chrome.storage.local.set({ agentConfig });
     }
   });
 });
@@ -51,10 +53,18 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 function getAgentConfig() {
-  return chrome.storage.local.get(['agentConfig']).then((result) => ({
+  return chrome.storage.local.get(['agentConfig']).then((result) => normalizeAgentConfig(result.agentConfig));
+}
+
+function normalizeAgentConfig(agentConfig) {
+  const normalized = {
     ...DEFAULT_AGENT_CONFIG,
-    ...(result.agentConfig || {})
-  }));
+    ...(agentConfig || {})
+  };
+  if (normalized.serverUrl === OLD_DEFAULT_SERVER_URL) {
+    normalized.serverUrl = DEFAULT_AGENT_CONFIG.serverUrl;
+  }
+  return normalized;
 }
 
 async function uploadReadingSnapshot(snapshot) {

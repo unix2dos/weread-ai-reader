@@ -54,7 +54,7 @@ export LLM_API_KEY="sk-..."
 export LLM_API_BASE="https://opencode.ai/zen/go/v1"
 export LLM_MODEL="deepseek-v4-flash"
 export CLIENT_TOKEN="change-me"
-export PORT="8787"
+export PORT="19763"
 
 npm start
 ```
@@ -62,7 +62,7 @@ npm start
 健康检查：
 
 ```bash
-curl http://127.0.0.1:8787/health
+curl http://127.0.0.1:19763/health
 ```
 
 ## 安装 Chrome 扩展
@@ -73,7 +73,7 @@ curl http://127.0.0.1:8787/health
 4. 选择本仓库的 `extension/` 目录。
 5. 打开扩展设置页，填写 Agent 服务器地址和 `CLIENT_TOKEN`。
 
-本地默认地址是 `http://127.0.0.1:8787`，默认开发令牌是 `dev-token`。如果服务器环境变量里改了 `CLIENT_TOKEN`，扩展设置页也要同步修改。
+本地默认地址是 `http://127.0.0.1:19763`，默认开发令牌是 `dev-token`。如果服务器环境变量里改了 `CLIENT_TOKEN`，扩展设置页也要同步修改。
 
 ## 使用方式
 
@@ -87,6 +87,7 @@ curl http://127.0.0.1:8787/health
 
 - WeRead API Key 和 LLM API Key 只放在服务器环境变量里。
 - Chrome 扩展只保存服务器地址和 `clientToken`。
+- `clientToken` 是扩展访问 Agent 服务器的共享访问令牌，需要和服务器环境变量 `CLIENT_TOKEN` 一致；它不是 WeRead 或 LLM API Key。
 - 调试输出会隐藏 LLM Authorization，不会把服务端密钥返回给浏览器。
 - 当前服务器是单用户开发形态，`clientToken` 是未来多用户隔离的协议边界。
 
