@@ -95,6 +95,7 @@ test('buildMessages includes required system prompt constraints', () => {
   assert.match(systemPrompt, /不要模拟作者对话/);
   assert.match(systemPrompt, /必须只输出 JSON/);
   assert.match(systemPrompt, /recommendation 只能是 deep_read、quick_read 或 skip_read/);
+  assert.match(systemPrompt, /优先使用公开阅读信号，其次参考书籍上下文，仅在存在个人信号时使用个人信号/);
 });
 
 test('buildRequestBody asks for JSON-only mastery judgement', () => {
