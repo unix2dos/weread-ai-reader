@@ -86,7 +86,7 @@ function buildStrategyInput({
         structuralImportance: '0-100 结构关键性分',
         skipRisk: '0-100 可跳读风险分'
       },
-      nextMustKnow: ['接下来最需要掌握的概念、区分或结构'],
+      nextMustKnow: ['1-4 条接下来最需要掌握的概念、区分或结构'],
       reasons: ['2-3 条只基于当前章节与信号的判断依据'],
       keyPassages: ['3-5 条热门划线或已采集正文片段'],
       questionsForAuthor: ['带着阅读的问题，不要给答案'],
@@ -133,7 +133,7 @@ function parseReadingJudgement(raw) {
   return {
     recommendation,
     masteryScore: normalizeMasteryScore(parsed.masteryScore),
-    nextMustKnow: normalizeStringArray(parsed.nextMustKnow, 5),
+    nextMustKnow: normalizeStringArray(parsed.nextMustKnow, 4),
     reasons: normalizeStringArray(parsed.reasons, 3),
     keyPassages: normalizeStringArray(parsed.keyPassages, 5),
     questionsForAuthor: normalizeStringArray(parsed.questionsForAuthor, 5),

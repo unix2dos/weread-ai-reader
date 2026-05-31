@@ -3,6 +3,8 @@ const test = require('node:test');
 
 const {
   PROMPT_VERSION,
+  buildCaptureInput,
+  buildMessages,
   buildRequestBody,
   buildStrategyInput,
   parseReadingJudgement,
@@ -66,7 +68,33 @@ test('buildStrategyInput includes mastery score and author-question output requi
   assert.equal(input.outputShape.masteryScore.informationDensity, '0-100 信息密度分');
   assert.equal(input.outputShape.masteryScore.structuralImportance, '0-100 结构关键性分');
   assert.equal(input.outputShape.masteryScore.skipRisk, '0-100 可跳读风险分');
+  assert.equal(input.outputShape.nextMustKnow[0], '1-4 条接下来最需要掌握的概念、区分或结构');
   assert.equal(input.outputShape.questionsForAuthor[0], '带着阅读的问题，不要给答案');
+});
+
+test('buildCaptureInput reports capture coverage for partial chapter text', () => {
+  const capture = buildCaptureInput(createSnapshot(), createSignalPanel());
+
+  assert.equal(capture.status, 'partial');
+  assert.equal(capture.coverage.status, 'partial');
+  assert.equal(capture.coveragePercent, 1);
+  assert.equal(capture.expectedWordCount, 3200);
+});
+
+test('buildMessages includes required system prompt constraints', () => {
+  const messages = buildMessages({
+    snapshot: createSnapshot(),
+    signalPanel: createSignalPanel()
+  });
+  const systemPrompt = messages[0].content;
+
+  assert.match(systemPrompt, /只判断当前章节/);
+  assert.match(systemPrompt, /不是文学质量/);
+  assert.match(systemPrompt, /追问问题只给问题/);
+  assert.match(systemPrompt, /不要给答案/);
+  assert.match(systemPrompt, /不要模拟作者对话/);
+  assert.match(systemPrompt, /必须只输出 JSON/);
+  assert.match(systemPrompt, /recommendation 只能是 deep_read、quick_read 或 skip_read/);
 });
 
 test('buildRequestBody asks for JSON-only mastery judgement', () => {
@@ -111,6 +139,21 @@ test('parseReadingJudgement normalizes score ranges and arrays', () => {
   });
   assert.deepEqual(judgement.questionsForAuthor, ['作者为什么先定义这个概念？']);
   assert.equal(judgement.readingAdvice, '先精读定义段，再快读例子。');
+});
+
+test('parseReadingJudgement limits list fields', () => {
+  const judgement = parseReadingJudgement(JSON.stringify({
+    recommendation: 'quick_read',
+    nextMustKnow: ['一', '二', '三', '四', '五'],
+    reasons: ['一', '二', '三', '四'],
+    keyPassages: ['一', '二', '三', '四', '五', '六'],
+    questionsForAuthor: ['一', '二', '三', '四', '五', '六']
+  }));
+
+  assert.deepEqual(judgement.nextMustKnow, ['一', '二', '三', '四']);
+  assert.deepEqual(judgement.reasons, ['一', '二', '三']);
+  assert.deepEqual(judgement.keyPassages, ['一', '二', '三', '四', '五']);
+  assert.deepEqual(judgement.questionsForAuthor, ['一', '二', '三', '四', '五']);
 });
 
 test('parseReadingJudgement accepts legacy conclusion labels as new recommendations', () => {
