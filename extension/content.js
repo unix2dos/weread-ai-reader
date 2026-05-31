@@ -10,6 +10,9 @@
   let canvasTextItems = [];
   let lastCanvasSummary = null;
   let lastFullRequestText = '';
+  let chapterCapture = null;
+  let lastCaptureMode = 'active-visible';
+  let lastCaptureStats = {};
 
   const MAX_CANVAS_TEXT_ITEMS = 12000;
   const CANVAS_BATCH_EVENT = '__wereadAiCanvasTextBatch';
@@ -116,6 +119,7 @@
         <div class="wap-section-title">信号面板</div>
         <div class="wap-meta">章节: ${escapeHtml(signalPanel.chapter?.title || '')}</div>
         <div class="wap-meta">热门划线: ${bestBookmarks.length} 条 · 划线评论: ${countComments(bookmarkReviews)} 条 · 书评: ${bookReviews.length} 条</div>
+        ${renderCaptureMeta(signalPanel.chapter)}
         ${renderWarnings(warnings)}
         ${renderBestBookmarks(bestBookmarks)}
         ${renderBookmarkReviews(bookmarkReviews)}
@@ -170,6 +174,16 @@
   function renderWarnings(warnings) {
     if (!warnings.length) return '';
     return `<div class="wap-warning">${warnings.map(escapeHtml).join('<br>')}</div>`;
+  }
+
+  function renderCaptureMeta(chapter) {
+    const capturedLength = currentChapterText.length;
+    if (!capturedLength) return '';
+
+    const wordCount = Number(chapter?.wordCount || 0);
+    const coverage = wordCount ? ` · 约 ${Math.min(100, Math.round((capturedLength / wordCount) * 100))}%` : '';
+    const officialCount = wordCount ? ` / 官方 ${wordCount.toLocaleString()} 字` : '';
+    return `<div class="wap-meta">正文采集: ${escapeHtml(labelCaptureMode(lastCaptureMode))} · ${capturedLength.toLocaleString()} 字${officialCount}${coverage}</div>`;
   }
 
   function updateJudgementLoading(text) {
@@ -545,6 +559,79 @@
     return match ? match[1] : '';
   }
 
+  function updatePassiveChapterCapture({ bookId, bookTitle, chapterUid, chapterTitle, visibleText }) {
+    const key = buildChapterCaptureKey({ bookId, chapterUid, chapterTitle });
+    const now = new Date().toISOString();
+    if (!chapterCapture || chapterCapture.key !== key) {
+      chapterCapture = {
+        key,
+        bookId,
+        bookTitle,
+        chapterUid,
+        chapterTitle,
+        lines: [],
+        lineKeys: new Set(),
+        segmentCount: 0,
+        lastVisibleKey: '',
+        startedAt: now,
+        updatedAt: now
+      };
+    }
+
+    chapterCapture.updatedAt = now;
+
+    const visibleKey = fingerprintLine(visibleText);
+    const isNewVisibleSegment = visibleKey && visibleKey !== chapterCapture.lastVisibleKey;
+    if (isNewVisibleSegment) {
+      chapterCapture.segmentCount += 1;
+      chapterCapture.lastVisibleKey = visibleKey;
+    }
+
+    const visibleLines = splitChapterLines(visibleText);
+    let addedLineCount = 0;
+    if (isNewVisibleSegment) {
+      for (const line of visibleLines) {
+        const key = fingerprintLine(line);
+        if (!key || chapterCapture.lineKeys.has(key)) continue;
+        chapterCapture.lineKeys.add(key);
+        chapterCapture.lines.push(line);
+        addedLineCount += 1;
+      }
+    }
+
+    const text = chapterCapture.lines.join('\n').trim() || visibleText;
+    const mode = chapterCapture.segmentCount > 1 || text.length > visibleText.length
+      ? 'passive-accumulated'
+      : 'active-visible';
+    const stats = {
+      visibleTextLength: visibleText.length,
+      accumulatedTextLength: text.length,
+      segmentCount: chapterCapture.segmentCount,
+      uniqueLineCount: chapterCapture.lines.length,
+      addedLineCount,
+      startedAt: chapterCapture.startedAt,
+      updatedAt: chapterCapture.updatedAt
+    };
+
+    log('log', 'chapter capture updated', { mode, ...stats });
+    return { mode, stats, text };
+  }
+
+  function buildChapterCaptureKey({ bookId, chapterUid, chapterTitle }) {
+    return [bookId || '', chapterUid || chapterTitle || ''].join(':');
+  }
+
+  function splitChapterLines(text) {
+    return String(text || '')
+      .split(/\n+/)
+      .map(cleanReaderLine)
+      .filter((line) => line && isLikelyReaderText(line));
+  }
+
+  function fingerprintLine(line) {
+    return cleanReaderLine(line).replace(/\s+/g, '');
+  }
+
   async function handleNewChapter(options = {}) {
     if (isExtracting) {
       log('log', '已有提取任务进行中，跳过');
@@ -566,25 +653,39 @@
       }
 
       const { bookTitle, chapterTitle, chapterUid } = getBookAndChapter();
-      if (!options.force && chapterTitle === currentChapterTitle && result.text === currentChapterText) {
+      const bookId = getBookId();
+      const capture = updatePassiveChapterCapture({
+        bookId,
+        bookTitle,
+        chapterUid,
+        chapterTitle,
+        visibleText: result.text
+      });
+      const chapterText = capture.text;
+
+      if (!options.force && chapterTitle === currentChapterTitle && chapterText === currentChapterText) {
         log('log', '重复章节，跳过');
         return;
       }
 
       currentChapterTitle = chapterTitle;
-      currentChapterText = result.text;
+      currentChapterText = chapterText;
+      lastCaptureMode = capture.mode;
+      lastCaptureStats = capture.stats;
       extractionCount++;
 
-      const validation = validateContent(result.text);
-      updateStatus(validation.looksValid ? 'success' : 'waiting', `${chapterTitle} · ${result.text.length.toLocaleString()} 字`);
+      const validation = validateContent(chapterText);
+      updateStatus(validation.looksValid ? 'success' : 'waiting', `${chapterTitle} · ${formatCaptureLength(chapterText.length, capture)}`);
 
       const snapshot = await buildReadingSnapshot({
-        bookId: getBookId(),
+        bookId,
         bookTitle,
         chapterUid,
         chapterTitle,
-        chapterText: result.text,
-        source: result.source
+        chapterText,
+        source: result.source,
+        captureMode: capture.mode,
+        captureStats: capture.stats
       });
 
       updateDebug(buildClientDebug(snapshot));
@@ -599,7 +700,7 @@
     }
   }
 
-  async function buildReadingSnapshot({ bookId, bookTitle, chapterUid, chapterTitle, chapterText, source }) {
+  async function buildReadingSnapshot({ bookId, bookTitle, chapterUid, chapterTitle, chapterText, source, captureMode, captureStats }) {
     const agentConfig = await getAgentConfig();
     const contentHash = await sha256(chapterText);
     return {
@@ -613,6 +714,8 @@
       contentHash,
       capturedAt: new Date().toISOString(),
       source,
+      captureMode,
+      captureStats,
       agentServerUrl: normalizeServerUrl(agentConfig.serverUrl)
     };
   }
@@ -632,7 +735,7 @@
     const body = response.body;
     currentSnapshotId = body.snapshotId;
     updateSignalPanel(body.signalPanel);
-    updateStatus('success', `已发送 ${snapshot.chapterText.length.toLocaleString()} 字，正在生成短判断...`);
+    updateStatus('success', `已发送 ${formatCaptureLength(snapshot.chapterText.length, snapshot)}，正在生成短判断...`);
     updateFullRequestDebug(buildFullRequestDebug(snapshot, body));
     updateDebug({
       ...buildClientDebug(snapshot),
@@ -660,7 +763,7 @@
         appendJudgementDelta(message.data.text || '');
       } else if (message.event === 'complete') {
         renderJudgement(message.data.judgement || {});
-        updateStatus('success', `${currentChapterTitle} · ${currentChapterText.length.toLocaleString()} 字 · 判断完成`);
+        updateStatus('success', `${currentChapterTitle} · ${formatCaptureLength(currentChapterText.length, { mode: lastCaptureMode, stats: lastCaptureStats })} · 判断完成`);
         judgementPort.disconnect();
         judgementPort = null;
       } else if (message.event === 'error') {
@@ -752,6 +855,8 @@
       preview: previewText(snapshot.chapterText),
       capturedAt: snapshot.capturedAt,
       agentServerUrl: snapshot.agentServerUrl,
+      captureMode: snapshot.captureMode,
+      captureStats: snapshot.captureStats,
       canvas: lastCanvasSummary
     };
   }
@@ -794,6 +899,8 @@
       },
       extractionDebug: {
         source: snapshot.source,
+        captureMode: snapshot.captureMode,
+        captureStats: snapshot.captureStats,
         contentHash: snapshot.contentHash,
         chapterTextLength: snapshot.chapterText.length,
         chapterTextPreview: previewText(snapshot.chapterText),
@@ -851,6 +958,12 @@
         bookTitle: snapshot.bookTitle,
         chapterUid: signalPanel.chapter?.chapterUid || snapshot.chapterUid,
         chapterTitle: snapshot.chapterTitle,
+        expectedWordCount: signalPanel.chapter?.wordCount || null,
+        capture: {
+          mode: snapshot.captureMode || 'active-visible',
+          stats: snapshot.captureStats || {},
+          note: 'passive-accumulated 表示只累计用户自然渲染过的页面内容；可能仍然不是完整章节。'
+        },
         chapterText: snapshot.chapterText
       },
       signals: {
@@ -913,6 +1026,20 @@
     if (value === 'worth_deep_read') return '值得精读';
     if (value === 'skip_read') return '可跳读';
     return '可快读';
+  }
+
+  function labelCaptureMode(value) {
+    if (value === 'passive-accumulated') return '被动累计';
+    if (value === 'server-skill') return '服务器正文';
+    if (value === 'background-clone') return '后台副本';
+    return '当前可见';
+  }
+
+  function formatCaptureLength(length, capture) {
+    const mode = capture?.captureMode || capture?.mode || lastCaptureMode;
+    const stats = capture?.captureStats || capture?.stats || lastCaptureStats;
+    const segmentSuffix = Number(stats?.segmentCount || 0) > 1 ? ` · ${Number(stats.segmentCount)} 段` : '';
+    return `${length.toLocaleString()} 字 · ${labelCaptureMode(mode)}${segmentSuffix}`;
   }
 
   function normalizeServerUrl(value) {

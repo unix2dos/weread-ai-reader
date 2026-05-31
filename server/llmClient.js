@@ -86,6 +86,12 @@ function buildMessages(snapshot, signalPanel, promptVersion) {
           bookTitle: snapshot.bookTitle,
           chapterUid: signalPanel.chapter.chapterUid,
           chapterTitle: snapshot.chapterTitle,
+          expectedWordCount: signalPanel.chapter.wordCount || null,
+          capture: {
+            mode: snapshot.captureMode || 'active-visible',
+            stats: snapshot.captureStats || {},
+            note: 'passive-accumulated means the text was accumulated only from pages the user naturally rendered; it may still be partial.'
+          },
           chapterText: snapshot.chapterText
         },
         signals: {

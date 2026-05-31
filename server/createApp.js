@@ -190,8 +190,31 @@ function normalizeSnapshot(snapshot) {
     chapterText: snapshot.chapterText,
     contentHash: snapshot.contentHash,
     capturedAt: snapshot.capturedAt,
-    source: snapshot.source
+    source: snapshot.source,
+    captureMode: typeof snapshot.captureMode === 'string' ? snapshot.captureMode : 'active-visible',
+    captureStats: normalizeCaptureStats(snapshot.captureStats)
   };
+}
+
+function normalizeCaptureStats(stats) {
+  if (!stats || typeof stats !== 'object' || Array.isArray(stats)) {
+    return {};
+  }
+
+  return {
+    visibleTextLength: numberOrNull(stats.visibleTextLength),
+    accumulatedTextLength: numberOrNull(stats.accumulatedTextLength),
+    segmentCount: numberOrNull(stats.segmentCount),
+    uniqueLineCount: numberOrNull(stats.uniqueLineCount),
+    addedLineCount: numberOrNull(stats.addedLineCount),
+    startedAt: typeof stats.startedAt === 'string' ? stats.startedAt : null,
+    updatedAt: typeof stats.updatedAt === 'string' ? stats.updatedAt : null
+  };
+}
+
+function numberOrNull(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 async function buildSignalPanel(wereadClient, snapshot, logger) {
@@ -261,7 +284,9 @@ async function buildSignalPanel(wereadClient, snapshot, logger) {
   const signalPanel = {
     chapter: {
       chapterUid,
-      title: chapter.title || snapshot.chapterTitle
+      title: chapter.title || snapshot.chapterTitle,
+      chapterIdx: numberOrNull(chapter.chapterIdx),
+      wordCount: numberOrNull(chapter.wordCount)
     },
     bookReviews: normalizeBookReviews(bookReviewsResp.reviews || []),
     bestBookmarks,
@@ -457,6 +482,8 @@ function buildSnapshotLog(snapshot, signalPanel, extra = {}) {
     chapterTextLength: snapshot.chapterText.length,
     chapterTextPreview: previewText(snapshot.chapterText),
     capturedAt: snapshot.capturedAt,
+    captureMode: snapshot.captureMode,
+    captureStats: snapshot.captureStats,
     signalCounts: signalPanel ? {
       bookReviews: signalPanel.bookReviews.length,
       bestBookmarks: signalPanel.bestBookmarks.length,
@@ -472,7 +499,10 @@ function buildLlmInputLog(record) {
     bookTitle: record.snapshot.bookTitle,
     chapterTitle: record.snapshot.chapterTitle,
     source: record.snapshot.source,
+    captureMode: record.snapshot.captureMode,
+    captureStats: record.snapshot.captureStats,
     chapterTextLength: record.snapshot.chapterText.length,
+    expectedChapterWordCount: record.signalPanel.chapter.wordCount || null,
     chapterTextPreview: previewText(record.snapshot.chapterText),
     contentHash: record.snapshot.contentHash,
     signalCounts: {

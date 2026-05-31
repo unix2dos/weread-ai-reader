@@ -44,7 +44,7 @@ function createStubWeReadClient(calls) {
       if (apiName === '/book/chapterinfo') {
         return {
           chapters: [
-            { chapterUid: 101, title: '第一章' }
+            { chapterUid: 101, title: '第一章', wordCount: 3200, chapterIdx: 1 }
           ]
         };
       }
@@ -132,6 +132,7 @@ test('returns snapshot id and structured signal panel for a valid reading snapsh
     assert.match(body.snapshotId, /^snap_/);
     assert.equal(body.cache.hit, false);
     assert.equal(body.signalPanel.chapter.chapterUid, 101);
+    assert.equal(body.signalPanel.chapter.wordCount, 3200);
     assert.equal(body.agentRequest.url, 'https://llm.example/v1/chat/completions');
     assert.equal(body.agentRequest.headers.Authorization, 'Bearer [hidden]');
     assert.equal(body.agentRequest.body.model, 'deepseek-v4-flash');
@@ -149,6 +150,48 @@ test('returns snapshot id and structured signal panel for a valid reading snapsh
       '/review/list'
     ]);
     assert.equal(calls.find((call) => call.apiName === '/book/bestbookmarks').params.chapterUid, 101);
+  });
+});
+
+test('includes passive capture metadata in the Agent request', async () => {
+  const app = createApp({
+    config: { clientToken: 'dev-token' },
+    wereadClient: createStubWeReadClient([]),
+    llmClient: createLlmClient({
+      apiKey: 'test-key',
+      apiBase: 'https://llm.example/v1',
+      model: 'deepseek-v4-flash',
+      fetchImpl: async () => {
+        throw new Error('fetch should not be called while storing a snapshot');
+      }
+    }),
+    logger: { info() {}, warn() {}, error() {} }
+  });
+
+  await withServer(app, async (baseUrl) => {
+    const resp = await fetch(`${baseUrl}/api/reading-snapshots`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(createSnapshot({
+        captureMode: 'passive-accumulated',
+        captureStats: {
+          visibleTextLength: 800,
+          accumulatedTextLength: 1600,
+          segmentCount: 2,
+          uniqueLineCount: 8,
+          addedLineCount: 3,
+          startedAt: '2026-05-31T12:00:00.000Z',
+          updatedAt: '2026-05-31T12:05:00.000Z'
+        }
+      }))
+    });
+
+    assert.equal(resp.status, 200);
+    const body = await resp.json();
+    const userContent = JSON.parse(body.agentRequest.body.messages[1].content);
+    assert.equal(userContent.chapter.capture.mode, 'passive-accumulated');
+    assert.equal(userContent.chapter.capture.stats.segmentCount, 2);
+    assert.equal(userContent.chapter.expectedWordCount, 3200);
   });
 });
 
