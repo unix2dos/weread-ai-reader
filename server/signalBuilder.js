@@ -3,6 +3,7 @@ async function buildSignalPanel(wereadClient, snapshot, options = {}) {
   const enablePersonalSignals = options.enablePersonalSignals === true;
   const skillCalls = [];
   const warnings = [];
+  let resolution = null;
   let skillBookId = snapshot.bookId;
   let chaptersResp = await callSkill(wereadClient, skillCalls, '/book/chapterinfo', {
     bookId: skillBookId
@@ -17,7 +18,16 @@ async function buildSignalPanel(wereadClient, snapshot, options = {}) {
       return null;
     });
     if (resolvedBookId && resolvedBookId !== skillBookId) {
-      warnings.push(`已通过书名将 reader id 解析为官方 bookId: ${skillBookId} -> ${resolvedBookId}`);
+      resolution = {
+        from: skillBookId,
+        to: resolvedBookId,
+        method: 'title_search'
+      };
+      logger.info('book_id_resolved_by_title', {
+        rawBookId: skillBookId,
+        resolvedBookId,
+        bookTitle: snapshot.bookTitle
+      });
       skillBookId = resolvedBookId;
       chaptersResp = await callSkill(wereadClient, skillCalls, '/book/chapterinfo', {
         bookId: skillBookId
@@ -80,6 +90,18 @@ async function buildSignalPanel(wereadClient, snapshot, options = {}) {
 
   const bookReviews = normalizeBookReviews(bookReviewsResp.reviews || []);
   const bookmarkReviews = normalizeBookmarkReviews(bookmarkReviewsResp.reviews || []);
+  const personalSignals = enablePersonalSignals
+    ? await buildPersonalSignals(wereadClient, skillCalls, warnings, {
+      bookId: skillBookId,
+      chapterUid,
+      shouldFetchUnderlines: Boolean(chapterUid) && bestBookmarks.length < 3
+    })
+    : {
+      enabled: false,
+      bookmarks: [],
+      reviews: [],
+      underlines: []
+    };
   const signalPanel = {
     chapter: {
       chapterUid,
@@ -96,12 +118,7 @@ async function buildSignalPanel(wereadClient, snapshot, options = {}) {
       bestBookmarks,
       bookmarkReviews
     },
-    personalSignals: {
-      enabled: enablePersonalSignals,
-      bookmarks: [],
-      reviews: [],
-      underlines: []
-    },
+    personalSignals,
     bookReviews,
     bestBookmarks,
     bookmarkReviews,
@@ -109,6 +126,7 @@ async function buildSignalPanel(wereadClient, snapshot, options = {}) {
       skillCalls,
       rawBookId: snapshot.bookId,
       resolvedBookId: skillBookId,
+      resolution,
       warnings
     }
   };
@@ -125,6 +143,41 @@ async function buildSignalPanel(wereadClient, snapshot, options = {}) {
   });
 
   return signalPanel;
+}
+
+async function buildPersonalSignals(wereadClient, skillCalls, warnings, context) {
+  const bookmarksResp = await callSkill(wereadClient, skillCalls, '/book/bookmarklist', {
+    bookId: context.bookId
+  }).catch((err) => {
+    warnings.push(`个人书签获取失败: ${err.message}`);
+    return { bookmarks: [] };
+  });
+
+  const reviewsResp = await callSkill(wereadClient, skillCalls, '/review/list/mine', {
+    bookid: context.bookId,
+    count: 20
+  }).catch((err) => {
+    warnings.push(`个人评论获取失败: ${err.message}`);
+    return { reviews: [] };
+  });
+
+  const underlinesResp = context.shouldFetchUnderlines
+    ? await callSkill(wereadClient, skillCalls, '/book/underlines', {
+      bookId: context.bookId,
+      chapterUid: context.chapterUid,
+      synckey: 0
+    }).catch((err) => {
+      warnings.push(`个人划线获取失败: ${err.message}`);
+      return { items: [] };
+    })
+    : { items: [] };
+
+  return {
+    enabled: true,
+    bookmarks: normalizePersonalBookmarks(extractArray(bookmarksResp, ['bookmarks', 'items'])),
+    reviews: normalizePersonalReviews(extractArray(reviewsResp, ['reviews', 'items'])),
+    underlines: normalizePersonalUnderlines(extractArray(underlinesResp, ['items', 'underlines']))
+  };
 }
 
 async function callSkill(wereadClient, skillCalls, apiName, params) {
@@ -234,6 +287,44 @@ function normalizeBookReviews(reviews) {
       likeCount: Number((review && (review.likeCount || review.likesCount)) || 0)
     };
   }).filter((item) => item.content).slice(0, 8);
+}
+
+function normalizePersonalBookmarks(items) {
+  return items.map((item) => ({
+    chapterUid: numberOrNull(item.chapterUid),
+    range: String(item.range || ''),
+    markText: String(item.markText || item.text || item.content || ''),
+    createTime: numberOrNull(item.createTime)
+  })).filter((item) => item.markText || item.range).slice(0, 20);
+}
+
+function normalizePersonalReviews(items) {
+  return items.map((item) => {
+    const review = item.review && (item.review.review || item.review);
+    const source = review || item;
+    return {
+      content: String(source.content || source.review || ''),
+      likeCount: Number(source.likeCount || source.likesCount || 0),
+      chapterUid: numberOrNull(source.chapterUid || item.chapterUid)
+    };
+  }).filter((item) => item.content).slice(0, 20);
+}
+
+function normalizePersonalUnderlines(items) {
+  return items.map((item) => ({
+    chapterUid: numberOrNull(item.chapterUid),
+    range: String(item.range || ''),
+    markText: String(item.markText || item.text || item.content || ''),
+    colorStyle: numberOrNull(item.colorStyle)
+  })).filter((item) => item.markText || item.range).slice(0, 20);
+}
+
+function extractArray(resp, keys) {
+  if (!resp || typeof resp !== 'object') return [];
+  for (const key of keys) {
+    if (Array.isArray(resp[key])) return resp[key];
+  }
+  return [];
 }
 
 function stringOrNull(value) {

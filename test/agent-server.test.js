@@ -382,6 +382,12 @@ test('resolves long reader ids to official book ids before fetching skill signal
     const body = await resp.json();
     assert.equal(body.signalPanel.debug.rawBookId, 'reader-long-id');
     assert.equal(body.signalPanel.debug.resolvedBookId, '3300060202');
+    assert.deepEqual(body.signalPanel.debug.resolution, {
+      from: 'reader-long-id',
+      to: '3300060202',
+      method: 'title_search'
+    });
+    assert.doesNotMatch(body.signalPanel.debug.warnings.join('\n'), /已通过书名/);
     assert.equal(calls.find((call) => call.apiName === '/book/bestbookmarks').params.bookId, '3300060202');
     assert.deepEqual(calls.map((call) => call.apiName), [
       '/book/chapterinfo',
@@ -392,6 +398,135 @@ test('resolves long reader ids to official book ids before fetching skill signal
       '/book/bestbookmarks',
       '/review/list'
     ]);
+  });
+});
+
+test('fetches personal signals when explicitly enabled', async () => {
+  const calls = [];
+  const app = createApp({
+    config: { clientToken: 'dev-token', enablePersonalSignals: true },
+    wereadClient: {
+      async call(apiName, params) {
+        calls.push({ apiName, params });
+        if (apiName === '/book/chapterinfo') {
+          return {
+            chapters: [
+              { chapterUid: 101, title: '第一章', wordCount: 3200, chapterIdx: 1 }
+            ]
+          };
+        }
+        if (apiName === '/book/info') return { bookId: params.bookId, title: '测试书' };
+        if (apiName === '/book/getprogress') return { bookId: params.bookId, book: { progress: 25 } };
+        if (apiName === '/book/bestbookmarks') {
+          return {
+            items: [
+              { range: '1-20', markText: '公开热门划线', totalCount: 2, chapterUid: 101 }
+            ]
+          };
+        }
+        if (apiName === '/book/readreviews') return { reviews: [] };
+        if (apiName === '/review/list') return { reviews: [] };
+        if (apiName === '/book/bookmarklist') {
+          return {
+            bookmarks: [
+              { chapterUid: 101, range: '3-8', markText: '我的书签', createTime: 1780200010 }
+            ]
+          };
+        }
+        if (apiName === '/review/list/mine') {
+          assert.deepEqual(params, { bookid: 'book-1', count: 20 });
+          return {
+            reviews: [
+              { review: { content: '我的短评', likeCount: 0, chapterUid: 101 } }
+            ]
+          };
+        }
+        if (apiName === '/book/underlines') {
+          assert.deepEqual(params, { bookId: 'book-1', chapterUid: 101, synckey: 0 });
+          return {
+            items: [
+              { chapterUid: 101, range: '9-18', markText: '我的划线', colorStyle: 2 }
+            ]
+          };
+        }
+        throw new Error(`Unexpected API: ${apiName}`);
+      }
+    },
+    llmClient: { streamShortJudgement: async function* () {} },
+    logger: { info() {}, warn() {}, error() {} }
+  });
+
+  await withServer(app, async (baseUrl) => {
+    const resp = await fetch(`${baseUrl}/api/reading-snapshots`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(createSnapshot())
+    });
+
+    assert.equal(resp.status, 200);
+    const body = await resp.json();
+    assert.equal(body.signalPanel.personalSignals.enabled, true);
+    assert.equal(body.signalPanel.personalSignals.bookmarks[0].markText, '我的书签');
+    assert.equal(body.signalPanel.personalSignals.reviews[0].content, '我的短评');
+    assert.equal(body.signalPanel.personalSignals.underlines[0].markText, '我的划线');
+    assert.deepEqual(calls.map((call) => call.apiName), [
+      '/book/chapterinfo',
+      '/book/info',
+      '/book/getprogress',
+      '/book/bestbookmarks',
+      '/book/readreviews',
+      '/review/list',
+      '/book/bookmarklist',
+      '/review/list/mine',
+      '/book/underlines'
+    ]);
+  });
+});
+
+test('keeps snapshot upload successful when personal signal calls fail', async () => {
+  const app = createApp({
+    config: { clientToken: 'dev-token', enablePersonalSignals: true },
+    wereadClient: {
+      async call(apiName, params) {
+        if (apiName === '/book/chapterinfo') {
+          return {
+            chapters: [
+              { chapterUid: 101, title: '第一章', wordCount: 3200, chapterIdx: 1 }
+            ]
+          };
+        }
+        if (apiName === '/book/info') return { bookId: params.bookId, title: '测试书' };
+        if (apiName === '/book/getprogress') return { bookId: params.bookId, book: { progress: 25 } };
+        if (apiName === '/book/bestbookmarks') return { items: [] };
+        if (apiName === '/review/list') return { reviews: [] };
+        if (apiName === '/book/bookmarklist') throw new Error('bookmarklist unavailable');
+        if (apiName === '/review/list/mine') throw new Error('mine reviews unavailable');
+        if (apiName === '/book/underlines') throw new Error('underlines unavailable');
+        throw new Error(`Unexpected API: ${apiName}`);
+      }
+    },
+    llmClient: { streamShortJudgement: async function* () {} },
+    logger: { info() {}, warn() {}, error() {} }
+  });
+
+  await withServer(app, async (baseUrl) => {
+    const resp = await fetch(`${baseUrl}/api/reading-snapshots`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(createSnapshot())
+    });
+
+    assert.equal(resp.status, 200);
+    const body = await resp.json();
+    assert.deepEqual(body.signalPanel.personalSignals, {
+      enabled: true,
+      bookmarks: [],
+      reviews: [],
+      underlines: []
+    });
+    assert.match(body.signalPanel.debug.warnings.join('\n'), /个人书签获取失败: bookmarklist unavailable/);
+    assert.match(body.signalPanel.debug.warnings.join('\n'), /个人评论获取失败: mine reviews unavailable/);
+    assert.match(body.signalPanel.debug.warnings.join('\n'), /个人划线获取失败: underlines unavailable/);
   });
 });
 
