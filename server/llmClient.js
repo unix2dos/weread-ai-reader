@@ -37,10 +37,12 @@ function createLlmClient({
       let raw = '';
       for await (const content of readOpenAiContentDeltas(resp.body)) {
         raw += content;
-        yield { type: 'delta', field: 'readingAdvice', text: content };
       }
 
       const readingJudgement = parseReadingJudgement(raw);
+      if (readingJudgement.readingAdvice) {
+        yield { type: 'delta', field: 'readingAdvice', text: readingJudgement.readingAdvice };
+      }
       yield {
         type: 'complete',
         readingJudgement,

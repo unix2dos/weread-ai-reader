@@ -82,6 +82,15 @@ function createStubWeReadClient(calls) {
   };
 }
 
+function createOpenAiSseBody(contentDeltas) {
+  return Readable.from([
+    ...contentDeltas.map((content) => Buffer.from(`data: ${JSON.stringify({
+      choices: [{ delta: { content } }]
+    })}\n\n`)),
+    Buffer.from('data: [DONE]\n\n')
+  ]);
+}
+
 test('rejects snapshots with an invalid client token', async () => {
   const app = createApp({
     config: { clientToken: 'dev-token' },
@@ -181,11 +190,10 @@ test('llmClient streams reading advice deltas and completes with reading strateg
     model: 'deepseek-v4-flash',
     fetchImpl: async () => ({
       ok: true,
-      body: Readable.from([
-        Buffer.from(`data: ${JSON.stringify({
-          choices: [{ delta: { content: modelContent } }]
-        })}\n\n`),
-        Buffer.from('data: [DONE]\n\n')
+      body: createOpenAiSseBody([
+        modelContent.slice(0, 40),
+        modelContent.slice(40, 120),
+        modelContent.slice(120)
       ])
     })
   });
@@ -205,14 +213,48 @@ test('llmClient streams reading advice deltas and completes with reading strateg
     events.push(event);
   }
 
+  assert.equal(events.length, 2);
   assert.deepEqual(events[0], {
     type: 'delta',
     field: 'readingAdvice',
-    text: modelContent
+    text: '先精读定义段。'
   });
+  assert.notEqual(events[0].text, modelContent);
+  assert.doesNotMatch(events[0].text, /"recommendation"/);
   assert.equal(events[1].type, 'complete');
   assert.equal(events[1].readingJudgement.recommendation, 'deep_read');
   assert.equal(events[1].judgement.conclusion, 'worth_deep_read');
+});
+
+test('llmClient rejects invalid streamed JSON without yielding a validated advice delta', async () => {
+  const client = createLlmClient({
+    apiKey: 'test-key',
+    apiBase: 'https://llm.example/v1',
+    model: 'deepseek-v4-flash',
+    fetchImpl: async () => ({
+      ok: true,
+      body: createOpenAiSseBody(['{"recommendation":"deep_read"', ' invalid'])
+    })
+  });
+
+  const events = [];
+  await assert.rejects(async () => {
+    for await (const event of client.streamShortJudgement({
+      snapshot: createSnapshot(),
+      signalPanel: {
+        chapter: { chapterUid: 101, wordCount: 3200 },
+        bestBookmarks: [],
+        bookmarkReviews: [],
+        bookReviews: [],
+        debug: { resolvedBookId: 'book-1' }
+      },
+      promptVersion: 'reading-strategy-v2'
+    })) {
+      events.push(event);
+    }
+  }, /Invalid reading judgement JSON/);
+
+  assert.deepEqual(events, []);
 });
 
 test('includes passive capture metadata in the Agent request', async () => {
@@ -323,7 +365,7 @@ test('streams short judgement events for a stored snapshot', async () => {
     wereadClient: createStubWeReadClient([]),
     llmClient: {
       async *streamShortJudgement() {
-        yield { type: 'delta', field: 'reason', text: '热门划线集中在核心论点。' };
+        yield { type: 'delta', field: 'readingAdvice', text: '先精读热门划线附近上下文。' };
         yield {
           type: 'complete',
           judgement: {
@@ -353,7 +395,7 @@ test('streams short judgement events for a stored snapshot', async () => {
 
     const text = await streamResp.text();
     assert.match(text, /event: start\ndata: \{"snapshotId":"snap_/);
-    assert.match(text, /event: delta\ndata: \{"field":"reason","text":"热门划线集中在核心论点。"\}/);
+    assert.match(text, /event: delta\ndata: \{"field":"readingAdvice","text":"先精读热门划线附近上下文。"\}/);
     assert.match(text, /event: complete\ndata: \{"judgement":\{"conclusion":"worth_deep_read"/);
   });
 });
