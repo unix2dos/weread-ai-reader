@@ -120,9 +120,9 @@ Chrome 扩展先 `POST /api/reading-snapshots` 上传阅读快照，Agent 服务
       "readingProgress": { "progress": 25 }
     },
     "publicSignals": {
-      "bookReviews": [{ "content": "string", "likeCount": 0 }],
+      "bookReviews": [{ "content": "string", "likeCount": 2 }],
       "bestBookmarks": [{ "range": "1-20", "markText": "string", "totalCount": 12 }],
-      "bookmarkReviews": [{ "range": "1-20", "totalCount": 3, "comments": [{ "content": "string", "likeCount": 0 }] }]
+      "bookmarkReviews": [{ "range": "1-20", "totalCount": 3, "comments": [{ "content": "string", "likeCount": 2 }] }]
     },
     "personalSignals": {
       "enabled": false,
@@ -130,9 +130,9 @@ Chrome 扩展先 `POST /api/reading-snapshots` 上传阅读快照，Agent 服务
       "reviews": [],
       "underlines": []
     },
-    "bookReviews": [{ "content": "string", "likeCount": 0 }],
+    "bookReviews": [{ "content": "string", "likeCount": 2 }],
     "bestBookmarks": [{ "range": "1-20", "markText": "string", "totalCount": 12 }],
-    "bookmarkReviews": [{ "range": "1-20", "totalCount": 3, "comments": [{ "content": "string", "likeCount": 0 }] }],
+    "bookmarkReviews": [{ "range": "1-20", "totalCount": 3, "comments": [{ "content": "string", "likeCount": 2 }] }],
     "debug": {
       "skillCalls": ["/book/chapterinfo", "/book/info", "/book/getprogress", "/book/bestbookmarks", "/book/readreviews", "/review/list"],
       "warnings": []
@@ -140,6 +140,8 @@ Chrome 扩展先 `POST /api/reading-snapshots` 上传阅读快照，Agent 服务
   }
 }
 ```
+
+`likeCount` 只在 WeRead Skill 回包明确提供点赞数字段时出现；不能把缺失字段归一化成 `0`。
 
 Agent 服务器不返回 HTML；UI 展示由 Chrome 扩展负责。
 
