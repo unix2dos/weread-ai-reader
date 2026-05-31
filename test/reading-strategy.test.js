@@ -201,6 +201,29 @@ test('buildStrategyInput caps signal volume for fast judgement', () => {
   assert.ok(input.signals.publicSignals.bookReviews[0].content.length <= 240);
 });
 
+test('buildStrategyInput does not invent zero likes for comments without like fields', () => {
+  const input = buildStrategyInput({
+    snapshot: createSnapshot(),
+    signalPanel: createSignalPanel({
+      publicSignals: {
+        bestBookmarks: [{ range: '1-20', markText: '核心概念', totalCount: 12, chapterUid: 101 }],
+        bookmarkReviews: [
+          {
+            range: '1-20',
+            totalCount: 1,
+            comments: [{ content: '接口没有返回点赞字段。' }]
+          }
+        ],
+        bookReviews: []
+      }
+    })
+  });
+
+  assert.deepEqual(input.signals.publicSignals.bookmarkReviews[0].comments, [
+    { content: '接口没有返回点赞字段。' }
+  ]);
+});
+
 test('parseReadingJudgement normalizes score ranges and arrays', () => {
   const judgement = parseReadingJudgement(JSON.stringify(completeReadingJudgement({
     recommendation: 'deep_read',

@@ -225,6 +225,67 @@ test('returns snapshot id and structured signal panel for a valid reading snapsh
   });
 });
 
+test('omits bookmark review like count when the skill response has no like field', async () => {
+  const app = createApp({
+    config: { clientToken: 'dev-token' },
+    wereadClient: {
+      async call(apiName) {
+        if (apiName === '/book/chapterinfo') {
+          return { chapters: [{ chapterUid: 101, title: '第一章', wordCount: 3200, chapterIdx: 1 }] };
+        }
+        if (apiName === '/book/info') return {};
+        if (apiName === '/book/getprogress') return {};
+        if (apiName === '/book/bestbookmarks') {
+          return {
+            items: [
+              { range: '1-20', markText: '值得精读的关键段落', totalCount: 12, chapterUid: 101 }
+            ]
+          };
+        }
+        if (apiName === '/book/readreviews') {
+          return {
+            reviews: [
+              {
+                range: '1-20',
+                totalCount: 1,
+                pageReviews: [
+                  { review: { content: '接口没有返回点赞字段。' } }
+                ]
+              }
+            ]
+          };
+        }
+        if (apiName === '/review/list') return { reviews: [] };
+        throw new Error(`Unexpected API: ${apiName}`);
+      }
+    },
+    llmClient: createLlmClient({
+      apiKey: 'test-key',
+      apiBase: 'https://llm.example/v1',
+      model: 'deepseek-v4-flash',
+      fetchImpl: async () => {
+        throw new Error('fetch should not be called while storing a snapshot');
+      }
+    }),
+    logger: { info() {}, warn() {}, error() {} }
+  });
+
+  await withServer(app, async (baseUrl) => {
+    const resp = await fetch(`${baseUrl}/api/reading-snapshots`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(createSnapshot())
+    });
+
+    assert.equal(resp.status, 200);
+    const body = await resp.json();
+
+    assert.deepEqual(body.signalPanel.bookmarkReviews[0].comments, [
+      { content: '接口没有返回点赞字段。' }
+    ]);
+  });
+});
+
 test('llmClient streams reading advice deltas and completes with reading strategy judgement', async () => {
   const modelContent = createCompleteModelContent();
   const client = createLlmClient({

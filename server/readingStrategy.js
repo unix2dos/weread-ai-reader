@@ -397,23 +397,36 @@ function normalizeBookmarkReviewComments(value, limit) {
   return value
     .map((item) => {
       if (typeof item === 'string') {
-        return { content: item.trim(), likeCount: 0 };
+        return { content: item.trim() };
       }
       if (!item || typeof item !== 'object') {
-        return { content: '', likeCount: 0 };
+        return { content: '' };
       }
-      const likeCount = Number(item.likeCount ?? item.likesCount ?? 0);
-      return {
-        content: String(item.content || item.text || item.review || '').trim(),
-        likeCount: Number.isFinite(likeCount) ? likeCount : 0
+      const comment = {
+        content: String(item.content || item.text || item.review || '').trim()
       };
+      const likeCount = optionalNumberFromFields(item, ['likeCount', 'likesCount']);
+      if (likeCount !== undefined) comment.likeCount = likeCount;
+      return comment;
     })
     .filter((item) => item.content)
     .slice(0, limit)
     .map((item) => ({
       content: truncateText(item.content, SIGNAL_LIMITS.shortText),
-      likeCount: item.likeCount
+      ...(item.likeCount !== undefined ? { likeCount: item.likeCount } : {})
     }));
+}
+
+function optionalNumberFromFields(source, fields) {
+  if (!source || typeof source !== 'object') return undefined;
+  for (const field of fields) {
+    if (!Object.prototype.hasOwnProperty.call(source, field)) continue;
+    const value = source[field];
+    if (value === null || value === undefined || value === '') continue;
+    const number = Number(value);
+    if (Number.isFinite(number) && number >= 0) return number;
+  }
+  return undefined;
 }
 
 function normalizeString(value) {

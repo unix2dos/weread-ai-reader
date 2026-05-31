@@ -284,26 +284,30 @@ function normalizeBookmarkReviewComments(pageReviews) {
     .map((pageReview, index) => {
       const review = pageReview && (pageReview.review && (pageReview.review.review || pageReview.review));
       const source = review || pageReview || {};
-      const likeCount = Number(source.likeCount ?? source.likesCount ?? 0);
-      return {
+      const comment = {
         content: String(source.content || ''),
-        likeCount: Number.isFinite(likeCount) ? likeCount : 0,
         index
       };
+      const likeCount = optionalNumberFromFields(source, ['likeCount', 'likesCount']);
+      if (likeCount !== undefined) comment.likeCount = likeCount;
+      return comment;
     })
     .filter((item) => item.content)
-    .sort((a, b) => b.likeCount - a.likeCount || a.index - b.index)
+    .sort((a, b) => comparableLikeCount(b) - comparableLikeCount(a) || a.index - b.index)
     .slice(0, BOOKMARK_REVIEW_COMMENT_DISPLAY_COUNT)
-    .map(({ content, likeCount }) => ({ content, likeCount }));
+    .map(({ content, likeCount }) => {
+      const comment = { content };
+      if (likeCount !== undefined) comment.likeCount = likeCount;
+      return comment;
+    });
 }
 
 function normalizeBookReviews(reviews) {
   return reviews.map((item) => {
     const review = item.review && (item.review.review || item.review);
-    return {
-      content: String((review && review.content) || ''),
-      likeCount: Number((review && (review.likeCount || review.likesCount)) || 0)
-    };
+    return withOptionalLikeCount({
+      content: String((review && review.content) || '')
+    }, review);
   }).filter((item) => item.content).slice(0, 8);
 }
 
@@ -320,11 +324,10 @@ function normalizePersonalReviews(items) {
   return items.map((item) => {
     const review = item.review && (item.review.review || item.review);
     const source = review || item;
-    return {
+    return withOptionalLikeCount({
       content: String(source.content || source.review || ''),
-      likeCount: Number(source.likeCount || source.likesCount || 0),
       chapterUid: numberOrNull(source.chapterUid || item.chapterUid)
-    };
+    }, source);
   }).filter((item) => item.content).slice(0, 20);
 }
 
@@ -352,6 +355,28 @@ function stringOrNull(value) {
 function numberOrNull(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function optionalNumberFromFields(source, fields) {
+  if (!source || typeof source !== 'object') return undefined;
+  for (const field of fields) {
+    if (!Object.prototype.hasOwnProperty.call(source, field)) continue;
+    const value = source[field];
+    if (value === null || value === undefined || value === '') continue;
+    const number = Number(value);
+    if (Number.isFinite(number) && number >= 0) return number;
+  }
+  return undefined;
+}
+
+function withOptionalLikeCount(item, source) {
+  const likeCount = optionalNumberFromFields(source, ['likeCount', 'likesCount']);
+  if (likeCount === undefined) return item;
+  return { ...item, likeCount };
+}
+
+function comparableLikeCount(item) {
+  return typeof item.likeCount === 'number' ? item.likeCount : -1;
 }
 
 module.exports = {
