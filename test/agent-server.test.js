@@ -49,6 +49,29 @@ function createStubWeReadClient(calls) {
           ]
         };
       }
+      if (apiName === '/book/info') {
+        return {
+          bookId: 'book-1',
+          title: '测试书',
+          author: '测试作者',
+          intro: '一本用于测试的书。',
+          category: '学习',
+          newRating: 86,
+          newRatingCount: 1200
+        };
+      }
+      if (apiName === '/book/getprogress') {
+        return {
+          bookId: 'book-1',
+          book: {
+            chapterUid: 101,
+            chapterOffset: 0,
+            progress: 25,
+            recordReadingTime: 3600
+          },
+          timestamp: 1780200000
+        };
+      }
       if (apiName === '/book/bestbookmarks') {
         return {
           items: [
@@ -158,8 +181,15 @@ test('returns snapshot id and structured signal panel for a valid reading snapsh
       '这段是本章核心。',
       '这里和全书主题呼应。'
     ]);
+    assert.equal(body.signalPanel.bookContext.bookInfo.author, '测试作者');
+    assert.equal(body.signalPanel.bookContext.bookInfo.newRating, 86);
+    assert.equal(body.signalPanel.bookContext.readingProgress.progress, 25);
+    assert.equal(body.signalPanel.publicSignals.bestBookmarks[0].markText, '值得精读的关键段落');
+    assert.equal(body.signalPanel.personalSignals.enabled, false);
     assert.deepEqual(body.signalPanel.debug.skillCalls, [
       '/book/chapterinfo',
+      '/book/info',
+      '/book/getprogress',
       '/book/bestbookmarks',
       '/book/readreviews',
       '/review/list'
@@ -325,6 +355,10 @@ test('resolves long reader ids to official book ids before fetching skill signal
       if (apiName === '/book/chapterinfo' && params.bookId === '3300060202') {
         return { chapters: [{ chapterUid: 101, title: '第一章' }] };
       }
+      if (apiName === '/book/info') return { bookId: params.bookId, title: '测试书' };
+      if (apiName === '/book/getprogress') {
+        return { bookId: params.bookId, book: { progress: 25 }, timestamp: 1780200000 };
+      }
       if (apiName === '/book/bestbookmarks') return { items: [] };
       if (apiName === '/review/list') return { reviews: [] };
       throw new Error(`Unexpected API: ${apiName}`);
@@ -353,9 +387,53 @@ test('resolves long reader ids to official book ids before fetching skill signal
       '/book/chapterinfo',
       '/store/search',
       '/book/chapterinfo',
+      '/book/info',
+      '/book/getprogress',
       '/book/bestbookmarks',
       '/review/list'
     ]);
+  });
+});
+
+test('keeps snapshot upload successful when book info signal fails', async () => {
+  const app = createApp({
+    config: { clientToken: 'dev-token' },
+    wereadClient: {
+      async call(apiName, params) {
+        if (apiName === '/book/chapterinfo') {
+          return {
+            chapters: [
+              { chapterUid: 101, title: '第一章', wordCount: 3200, chapterIdx: 1 }
+            ]
+          };
+        }
+        if (apiName === '/book/info') {
+          throw new Error('book info unavailable');
+        }
+        if (apiName === '/book/getprogress') {
+          return { bookId: params.bookId, book: { progress: 25 }, timestamp: 1780200000 };
+        }
+        if (apiName === '/book/bestbookmarks') return { items: [] };
+        if (apiName === '/review/list') return { reviews: [] };
+        throw new Error(`Unexpected API: ${apiName}`);
+      }
+    },
+    llmClient: { streamShortJudgement: async function* () {} },
+    logger: { info() {}, warn() {}, error() {} }
+  });
+
+  await withServer(app, async (baseUrl) => {
+    const resp = await fetch(`${baseUrl}/api/reading-snapshots`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(createSnapshot())
+    });
+
+    assert.equal(resp.status, 200);
+    const body = await resp.json();
+    assert.deepEqual(body.signalPanel.bookContext.bookInfo, {});
+    assert.equal(body.signalPanel.bookContext.readingProgress.progress, 25);
+    assert.match(body.signalPanel.debug.warnings.join('\n'), /书籍信息获取失败: book info unavailable/);
   });
 });
 

@@ -4,7 +4,8 @@ const { createWeReadClient } = require('./wereadClient');
 
 const config = {
   port: Number(process.env.PORT || 19763),
-  clientToken: process.env.CLIENT_TOKEN || 'dev-token'
+  clientToken: process.env.CLIENT_TOKEN || 'dev-token',
+  enablePersonalSignals: process.env.ENABLE_PERSONAL_SIGNALS === 'true'
 };
 
 const app = createApp({
@@ -25,4 +26,5 @@ const app = createApp({
 app.listen(config.port, () => {
   console.log(`[WeRead AI Agent] listening on http://127.0.0.1:${config.port}`);
   console.log(`[WeRead AI Agent] LLM model: ${process.env.LLM_MODEL || 'gpt-4.1-nano'}`);
+  console.log(`[WeRead AI Agent] personal signals: ${config.enablePersonalSignals ? 'enabled' : 'disabled'}`);
 });
