@@ -159,6 +159,14 @@ test('parseReadingJudgement limits list fields', () => {
 
 test('parseReadingJudgement rejects invalid model output', () => {
   assert.throws(() => parseReadingJudgement('not-json'), /Invalid reading judgement JSON/);
+  assert.throws(
+    () => parseReadingJudgement('prefix {"recommendation":"deep_read"} suffix'),
+    /Invalid reading judgement JSON/
+  );
+  assert.throws(
+    () => parseReadingJudgement('```json\n{"recommendation":"deep_read"}\n```'),
+    /Invalid reading judgement JSON/
+  );
   assert.throws(() => parseReadingJudgement('{}'), /Missing reading judgement recommendation/);
   assert.throws(() => parseReadingJudgement(JSON.stringify({
     reasons: ['缺少推荐']

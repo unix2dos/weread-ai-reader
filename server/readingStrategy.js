@@ -177,16 +177,7 @@ function parseJsonObject(raw) {
   try {
     return JSON.parse(raw);
   } catch {
-    const match = String(raw || '').match(/\{[\s\S]*\}/);
-    if (!match) {
-      throw new Error('Invalid reading judgement JSON');
-    }
-
-    try {
-      return JSON.parse(match[0]);
-    } catch {
-      throw new Error('Invalid reading judgement JSON');
-    }
+    throw new Error('Invalid reading judgement JSON');
   }
 }
 
