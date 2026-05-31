@@ -38,6 +38,11 @@ test('debug fallback no longer rebuilds a divergent prompt', () => {
   assert.doesNotMatch(contentJs, /server-generated-url-unavailable/);
 });
 
+test('debug request summary uses reading strategy prompt version', () => {
+  assert.doesNotMatch(contentJs, /short-judgement-v1/);
+  assert.match(contentJs, /reading-strategy-v2/);
+});
+
 test('collapsed panel hides secondary actions to avoid squeezed controls', () => {
   assert.match(contentCss, /#weread-ai-panel\.collapsed\s+\.wap-analyze\s*\{[^}]*display:\s*none/s);
   assert.match(contentJs, /<button class="wap-collapsed-title" type="button"/);

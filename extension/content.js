@@ -1032,7 +1032,7 @@
   function buildFullRequestDebug(snapshot, uploadResponse) {
     const signalPanel = uploadResponse.signalPanel || {};
     const resolvedBookId = signalPanel.debug?.resolvedBookId || snapshot.bookId;
-    const promptVersion = 'short-judgement-v1';
+    const promptVersion = 'reading-strategy-v2';
     const agentInput = buildAgentInputDebug(snapshot, signalPanel, promptVersion, resolvedBookId);
 
     return {
