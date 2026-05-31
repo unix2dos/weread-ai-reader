@@ -1,6 +1,7 @@
 {
   "name": "weread-ai-reader",
   "version": "0.1.0",
+  "description": "微信读书网页版实时 AI 跟读助手，结合正文采集、官方 Skill 信号和 LLM 生成阅读判断。",
   "private": true,
   "scripts": {
     "start": "node server/index.js",

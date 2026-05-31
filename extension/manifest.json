@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "WeRead AI Reader",
   "version": "0.1.0",
-  "description": "AI-powered reading companion for WeChat Read",
+  "description": "微信读书网页版实时 AI 跟读助手，结合正文采集、热门划线和评论生成阅读判断。",
   "permissions": [
     "storage"
   ],
