@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const { once } = require('node:events');
 const http = require('node:http');
+const { Readable } = require('node:stream');
 const test = require('node:test');
 
 const { createApp } = require('../server/createApp');
@@ -136,6 +137,11 @@ test('returns snapshot id and structured signal panel for a valid reading snapsh
     assert.equal(body.agentRequest.url, 'https://llm.example/v1/chat/completions');
     assert.equal(body.agentRequest.headers.Authorization, 'Bearer [hidden]');
     assert.equal(body.agentRequest.body.model, 'deepseek-v4-flash');
+    const requestContent = JSON.parse(body.agentRequest.body.messages[1].content);
+    assert.equal(requestContent.promptVersion, 'reading-strategy-v2');
+    assert.equal(requestContent.outputShape.recommendation, 'deep_read | quick_read | skip_read');
+    assert.equal(requestContent.outputShape.masteryScore.overall, '0-100 掌握价值分');
+    assert.equal(requestContent.outputShape.questionsForAuthor[0], '带着阅读的问题，不要给答案');
     assert.match(body.agentRequest.body.messages[1].content, /这一章讨论了如何判断一章是否值得精读/);
     assert.doesNotMatch(JSON.stringify(body.agentRequest), /test-key|dev-token/);
     assert.equal(body.signalPanel.bestBookmarks[0].markText, '值得精读的关键段落');
@@ -151,6 +157,62 @@ test('returns snapshot id and structured signal panel for a valid reading snapsh
     ]);
     assert.equal(calls.find((call) => call.apiName === '/book/bestbookmarks').params.chapterUid, 101);
   });
+});
+
+test('llmClient streams reading advice deltas and completes with reading strategy judgement', async () => {
+  const modelContent = JSON.stringify({
+    recommendation: 'deep_read',
+    masteryScore: {
+      overall: 88,
+      informationDensity: 82,
+      structuralImportance: 90,
+      skipRisk: 75
+    },
+    nextMustKnow: ['核心概念如何支撑后文'],
+    reasons: ['热门划线集中在核心定义。'],
+    keyPassages: ['核心概念'],
+    questionsForAuthor: ['作者为什么先定义这个概念？'],
+    readerPerspective: '读者认为这里是基础。',
+    readingAdvice: '先精读定义段。'
+  });
+  const client = createLlmClient({
+    apiKey: 'test-key',
+    apiBase: 'https://llm.example/v1',
+    model: 'deepseek-v4-flash',
+    fetchImpl: async () => ({
+      ok: true,
+      body: Readable.from([
+        Buffer.from(`data: ${JSON.stringify({
+          choices: [{ delta: { content: modelContent } }]
+        })}\n\n`),
+        Buffer.from('data: [DONE]\n\n')
+      ])
+    })
+  });
+
+  const events = [];
+  for await (const event of client.streamShortJudgement({
+    snapshot: createSnapshot(),
+    signalPanel: {
+      chapter: { chapterUid: 101, wordCount: 3200 },
+      bestBookmarks: [],
+      bookmarkReviews: [],
+      bookReviews: [],
+      debug: { resolvedBookId: 'book-1' }
+    },
+    promptVersion: 'reading-strategy-v2'
+  })) {
+    events.push(event);
+  }
+
+  assert.deepEqual(events[0], {
+    type: 'delta',
+    field: 'readingAdvice',
+    text: modelContent
+  });
+  assert.equal(events[1].type, 'complete');
+  assert.equal(events[1].readingJudgement.recommendation, 'deep_read');
+  assert.equal(events[1].judgement.conclusion, 'worth_deep_read');
 });
 
 test('includes passive capture metadata in the Agent request', async () => {
@@ -189,7 +251,7 @@ test('includes passive capture metadata in the Agent request', async () => {
     assert.equal(resp.status, 200);
     const body = await resp.json();
     const userContent = JSON.parse(body.agentRequest.body.messages[1].content);
-    assert.match(body.agentRequest.body.messages[0].content, /不得声称已经读完整章正文/);
+    assert.match(body.agentRequest.body.messages[0].content, /只基于当前章节正文快照、采集覆盖率/);
     assert.equal(userContent.chapter.capture.mode, 'passive-accumulated');
     assert.equal(userContent.chapter.capture.stats.segmentCount, 2);
     assert.equal(userContent.chapter.capture.status, 'partial');
