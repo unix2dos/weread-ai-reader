@@ -128,6 +128,7 @@
 
     el.innerHTML = `
       ${renderReadingSignals(state)}
+      ${renderBookReviewPanel(state)}
       ${renderDebugPanel(state)}
     `;
   }
@@ -137,7 +138,6 @@
     const warnings = signalPanel.debug?.warnings || [];
     const bestBookmarks = signalPanel.bestBookmarks || signalPanel.publicSignals?.bestBookmarks || [];
     const bookmarkReviews = signalPanel.bookmarkReviews || signalPanel.publicSignals?.bookmarkReviews || [];
-    const bookReviews = signalPanel.bookReviews || signalPanel.publicSignals?.bookReviews || [];
 
     return `
       <details class="summary-signals" open>
@@ -146,6 +146,20 @@
           ${renderCaptureMeta(state, signalPanel)}
           ${renderWarnings(warnings)}
           ${renderHighlightEvidence(bestBookmarks, bookmarkReviews)}
+        </div>
+      </details>
+    `;
+  }
+
+  function renderBookReviewPanel(state) {
+    const signalPanel = state.signalPanel || {};
+    const bookReviews = signalPanel.bookReviews || signalPanel.publicSignals?.bookReviews || [];
+    if (!bookReviews.length) return '';
+
+    return `
+      <details class="summary-book-review-panel">
+        <summary>整本书评价背景</summary>
+        <div class="summary-book-review-body">
           ${renderBookReviews(bookReviews)}
         </div>
       </details>
@@ -321,7 +335,6 @@
     if (!items.length) return '';
     return `
       <section class="summary-section summary-book-reviews">
-        <div class="summary-section-title">整本书评价背景</div>
         <ul class="summary-list">
           ${items.map((item) => `<li>${escapeHtml(item.content || '')}</li>`).join('')}
         </ul>

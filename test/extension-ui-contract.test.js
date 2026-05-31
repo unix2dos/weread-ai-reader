@@ -136,14 +136,21 @@ test('summary judgement does not render empty text sections', () => {
   assert.doesNotMatch(summaryJs, /<div class="summary-section-title">读者视角<\/div>\s*<div class="summary-analysis-content">\$\{escapeHtml\(judgement\.readerPerspective \|\| ''\)\}<\/div>/);
 });
 
-test('reading signals show highlights and book reviews in one expanded frame', () => {
-  assert.match(summaryJs, /function renderBookReviews\(items\)/);
+test('reading signals and book reviews are separate foldable frames', () => {
+  const renderSignalsSource = summaryJs.match(/function renderReadingSignals\(state\) \{([\s\S]*?)\n  function renderBookReviewPanel/);
+  assert.ok(renderSignalsSource, 'renderReadingSignals source should be inspectable');
+  const signalsSource = renderSignalsSource[1];
+
+  assert.match(summaryJs, /function renderBookReviewPanel\(state\)/);
   assert.match(summaryJs, /<details class="summary-signals" open>/);
   assert.match(summaryJs, /<summary>阅读信号<\/summary>/);
   assert.match(summaryJs, /renderHighlightEvidence\(bestBookmarks, bookmarkReviews\)/);
-  assert.match(summaryJs, /renderBookReviews\(bookReviews\)/);
-  assert.match(summaryJs, /<div class="summary-section-title">整本书评价背景<\/div>/);
+  assert.doesNotMatch(signalsSource, /renderBookReviews\(bookReviews\)/);
+  assert.match(summaryJs, /<details class="summary-book-review-panel">/);
+  assert.doesNotMatch(summaryJs, /<details class="summary-book-review-panel" open>/);
+  assert.match(summaryJs, /<summary>整本书评价背景<\/summary>/);
   assert.match(summaryJs, /items\.map\(\(item\) => `<li>\$\{escapeHtml\(item\.content \|\| ''\)\}<\/li>`\)/);
+  assert.match(summaryCss, /\.summary-book-review-panel/);
   assert.doesNotMatch(summaryJs, /summary-nested-evidence summary-book-reviews/);
   assert.doesNotMatch(summaryJs, /items\.slice\(0, 3\)\.map\(\(item\) => `<li>\$\{escapeHtml\(truncate\(item\.content, 120\)\)\}<\/li>`\)/);
 });

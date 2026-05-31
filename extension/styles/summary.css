@@ -239,6 +239,7 @@ body {
 }
 
 .summary-signals,
+.summary-book-review-panel,
 .summary-debug-panel {
   margin-top: 12px;
   border: 1px solid var(--border);
@@ -247,6 +248,7 @@ body {
 }
 
 .summary-signals summary,
+.summary-book-review-panel summary,
 .summary-debug-panel summary,
 .summary-debug summary {
   cursor: pointer;
@@ -254,12 +256,14 @@ body {
 }
 
 .summary-signals > summary,
+.summary-book-review-panel > summary,
 .summary-debug-panel > summary {
   padding: 10px 12px;
   font-weight: 700;
 }
 
 .summary-signals-body,
+.summary-book-review-body,
 .summary-debug-body {
   padding: 0 12px 12px;
 }
