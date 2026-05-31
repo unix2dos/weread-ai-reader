@@ -189,9 +189,16 @@ test('includes passive capture metadata in the Agent request', async () => {
     assert.equal(resp.status, 200);
     const body = await resp.json();
     const userContent = JSON.parse(body.agentRequest.body.messages[1].content);
+    assert.match(body.agentRequest.body.messages[0].content, /不得声称已经读完整章正文/);
     assert.equal(userContent.chapter.capture.mode, 'passive-accumulated');
     assert.equal(userContent.chapter.capture.stats.segmentCount, 2);
+    assert.equal(userContent.chapter.capture.status, 'partial');
+    assert.equal(userContent.chapter.capture.coverage.status, 'partial');
+    assert.equal(userContent.chapter.capture.coverage.percent, 1);
+    assert.equal(userContent.chapter.capture.coveragePercent, 1);
+    assert.equal(userContent.chapter.capture.instruction, 'Treat the chapter text as partial. Make a stage-aware judgement and do not imply the full chapter body was read.');
     assert.equal(userContent.chapter.expectedWordCount, 3200);
+    assert.equal(userContent.chapter.capture.expectedWordCount, 3200);
   });
 });
 

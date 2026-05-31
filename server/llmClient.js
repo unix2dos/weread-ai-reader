@@ -65,11 +65,16 @@ function buildRequestBody(snapshot, signalPanel, promptVersion, model) {
 }
 
 function buildMessages(snapshot, signalPanel, promptVersion) {
+  const capture = buildCaptureInput(snapshot, signalPanel);
+
   return [
     {
       role: 'system',
       content: [
         '你是微信读书实时跟读助手，只做本章阅读价值判断。',
+        '你会同时看到章节正文采集覆盖率和官方 WeRead Skill 信号。',
+        '如果 capture.coverage.status 不是 full，应明确这是阶段性建议，不得声称已经读完整章正文。',
+        '低覆盖率时，更多依赖热门划线、划线评论和书评来判断本章阅读价值；正文证据只能引用已采集片段。',
         '必须输出 JSON，不要输出 Markdown。',
         'JSON 字段：conclusion, reasons, keyPassages, readerPerspective, readingAction。',
         'conclusion 只能是 worth_deep_read、quick_read 或 skip_read。'
@@ -86,12 +91,8 @@ function buildMessages(snapshot, signalPanel, promptVersion) {
           bookTitle: snapshot.bookTitle,
           chapterUid: signalPanel.chapter.chapterUid,
           chapterTitle: snapshot.chapterTitle,
-          expectedWordCount: signalPanel.chapter.wordCount || null,
-          capture: {
-            mode: snapshot.captureMode || 'active-visible',
-            stats: snapshot.captureStats || {},
-            note: 'passive-accumulated means the text was accumulated only from pages the user naturally rendered; it may still be partial.'
-          },
+          expectedWordCount: capture.expectedWordCount,
+          capture,
           chapterText: snapshot.chapterText
         },
         signals: {
@@ -109,6 +110,47 @@ function buildMessages(snapshot, signalPanel, promptVersion) {
       })
     }
   ];
+}
+
+function buildCaptureInput(snapshot, signalPanel) {
+  const expectedWordCount = numberOrNull(signalPanel.chapter.wordCount);
+  const capturedTextLength = snapshot.chapterText.length;
+  const coverageRatio = expectedWordCount ? capturedTextLength / expectedWordCount : null;
+  const coveragePercent = coverageRatio === null ? null : Math.min(100, Math.round(coverageRatio * 100));
+  const status = classifyCoverage(snapshot.captureMode, coverageRatio);
+
+  return {
+    mode: snapshot.captureMode || 'active-visible',
+    stats: snapshot.captureStats || {},
+    capturedTextLength,
+    expectedWordCount,
+    coverageRatio: coverageRatio === null ? null : Number(coverageRatio.toFixed(3)),
+    coveragePercent,
+    status,
+    coverage: {
+      status,
+      ratio: coverageRatio === null ? null : Number(coverageRatio.toFixed(3)),
+      percent: coveragePercent,
+      capturedTextLength,
+      expectedWordCount
+    },
+    note: 'passive-accumulated means the text was accumulated only from pages the user naturally rendered; it may still be partial.',
+    instruction: status === 'full'
+      ? 'You may treat the captured chapter text as approximately complete.'
+      : 'Treat the chapter text as partial. Make a stage-aware judgement and do not imply the full chapter body was read.'
+  };
+}
+
+function classifyCoverage(mode, ratio) {
+  if (mode === 'server-skill') return 'full';
+  if (ratio !== null && ratio >= 0.9) return 'full';
+  if (ratio !== null && ratio >= 0.6) return 'substantial';
+  return 'partial';
+}
+
+function numberOrNull(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : null;
 }
 
 async function* readOpenAiContentDeltas(body) {

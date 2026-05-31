@@ -13,6 +13,7 @@
   let chapterCapture = null;
   let lastCaptureMode = 'active-visible';
   let lastCaptureStats = {};
+  let lastExpectedChapterWordCount = 0;
 
   const MAX_CANVAS_TEXT_ITEMS = 12000;
   const CANVAS_BATCH_EVENT = '__wereadAiCanvasTextBatch';
@@ -113,6 +114,7 @@
     const bookmarkReviews = signalPanel.bookmarkReviews || [];
     const bookReviews = signalPanel.bookReviews || [];
     const warnings = signalPanel.debug?.warnings || [];
+    lastExpectedChapterWordCount = Number(signalPanel.chapter?.wordCount || 0) || 0;
 
     el.innerHTML = `
       <div class="wap-section">
@@ -120,6 +122,7 @@
         <div class="wap-meta">章节: ${escapeHtml(signalPanel.chapter?.title || '')}</div>
         <div class="wap-meta">热门划线: ${bestBookmarks.length} 条 · 划线评论: ${countComments(bookmarkReviews)} 条 · 书评: ${bookReviews.length} 条</div>
         ${renderCaptureMeta(signalPanel.chapter)}
+        ${renderAdviceScopeMeta(signalPanel.chapter)}
         ${renderWarnings(warnings)}
         ${renderBestBookmarks(bestBookmarks)}
         ${renderBookmarkReviews(bookmarkReviews)}
@@ -186,6 +189,11 @@
     return `<div class="wap-meta">正文采集: ${escapeHtml(labelCaptureMode(lastCaptureMode))} · ${capturedLength.toLocaleString()} 字${officialCount}${coverage}</div>`;
   }
 
+  function renderAdviceScopeMeta(chapter) {
+    const text = buildAdviceScopeText(Number(chapter?.wordCount || 0), currentChapterText.length, lastCaptureMode);
+    return text ? `<div class="wap-meta">建议范围: ${escapeHtml(text)}</div>` : '';
+  }
+
   function updateJudgementLoading(text) {
     const el = document.querySelector('#weread-ai-panel .wap-judgement');
     if (!el) return;
@@ -214,6 +222,7 @@
     el.innerHTML = `
       <div class="wap-section wap-judgement-card">
         <div class="wap-section-title">短判断</div>
+        <div class="wap-meta">${escapeHtml(buildAdviceScopeText(lastExpectedChapterWordCount, currentChapterText.length, lastCaptureMode) || '实时建议')}</div>
         <div class="wap-verdict">${escapeHtml(labelConclusion(judgement.conclusion))}</div>
         ${renderList('理由', judgement.reasons)}
         ${renderList('重点段落', judgement.keyPassages)}
@@ -959,11 +968,7 @@
         chapterUid: signalPanel.chapter?.chapterUid || snapshot.chapterUid,
         chapterTitle: snapshot.chapterTitle,
         expectedWordCount: signalPanel.chapter?.wordCount || null,
-        capture: {
-          mode: snapshot.captureMode || 'active-visible',
-          stats: snapshot.captureStats || {},
-          note: 'passive-accumulated 表示只累计用户自然渲染过的页面内容；可能仍然不是完整章节。'
-        },
+        capture: buildCaptureDebug(snapshot, signalPanel),
         chapterText: snapshot.chapterText
       },
       signals: {
@@ -979,6 +984,42 @@
         readingAction: '接下来精读哪部分、带着什么问题读'
       }
     };
+  }
+
+  function buildCaptureDebug(snapshot, signalPanel) {
+    const expectedWordCount = Number(signalPanel.chapter?.wordCount || 0) || null;
+    const capturedTextLength = snapshot.chapterText.length;
+    const coverageRatio = expectedWordCount ? capturedTextLength / expectedWordCount : null;
+    const coveragePercent = coverageRatio === null ? null : Math.min(100, Math.round(coverageRatio * 100));
+    const status = classifyCaptureCoverage(snapshot.captureMode, coverageRatio);
+
+    return {
+      mode: snapshot.captureMode || 'active-visible',
+      stats: snapshot.captureStats || {},
+      capturedTextLength,
+      expectedWordCount,
+      coverageRatio: coverageRatio === null ? null : Number(coverageRatio.toFixed(3)),
+      coveragePercent,
+      status,
+      coverage: {
+        status,
+        ratio: coverageRatio === null ? null : Number(coverageRatio.toFixed(3)),
+        percent: coveragePercent,
+        capturedTextLength,
+        expectedWordCount
+      },
+      note: 'passive-accumulated 表示只累计用户自然渲染过的页面内容；可能仍然不是完整章节。',
+      instruction: status === 'full'
+        ? '可近似视为完整章节正文。'
+        : '必须视为部分正文，只能给阶段性判断，不得暗示已读完整章正文。'
+    };
+  }
+
+  function classifyCaptureCoverage(mode, ratio) {
+    if (mode === 'server-skill') return 'full';
+    if (ratio !== null && ratio >= 0.9) return 'full';
+    if (ratio !== null && ratio >= 0.6) return 'substantial';
+    return 'partial';
   }
 
   function buildAgentRequestFallback(agentInput) {
@@ -1033,6 +1074,16 @@
     if (value === 'server-skill') return '服务器正文';
     if (value === 'background-clone') return '后台副本';
     return '当前可见';
+  }
+
+  function buildAdviceScopeText(expectedWordCount, capturedLength, mode) {
+    if (!capturedLength) return '';
+    const ratio = expectedWordCount ? capturedLength / expectedWordCount : null;
+    const status = classifyCaptureCoverage(mode, ratio);
+    if (status === 'full') return '章节级建议';
+    if (status === 'substantial') return `阶段性建议，正文覆盖约 ${Math.round(ratio * 100)}%`;
+    if (ratio !== null) return `阶段性建议，正文覆盖约 ${Math.round(ratio * 100)}%`;
+    return '阶段性建议，正文覆盖率未知';
   }
 
   function formatCaptureLength(length, capture) {
