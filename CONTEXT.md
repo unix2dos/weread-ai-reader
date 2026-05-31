@@ -105,11 +105,26 @@ Chrome 扩展先 `POST /api/reading-snapshots` 上传阅读快照，Agent 服务
   "cache": { "hit": false },
   "signalPanel": {
     "chapter": { "chapterUid": 123, "title": "string" },
+    "bookContext": {
+      "bookInfo": { "title": "string", "author": "string", "newRating": 86 },
+      "readingProgress": { "progress": 25 }
+    },
+    "publicSignals": {
+      "bookReviews": [{ "content": "string", "likeCount": 0 }],
+      "bestBookmarks": [{ "range": "1-20", "markText": "string", "totalCount": 12 }],
+      "bookmarkReviews": [{ "range": "1-20", "totalCount": 3, "comments": ["string"] }]
+    },
+    "personalSignals": {
+      "enabled": false,
+      "bookmarks": [],
+      "reviews": [],
+      "underlines": []
+    },
     "bookReviews": [{ "content": "string", "likeCount": 0 }],
     "bestBookmarks": [{ "range": "1-20", "markText": "string", "totalCount": 12 }],
     "bookmarkReviews": [{ "range": "1-20", "totalCount": 3, "comments": ["string"] }],
     "debug": {
-      "skillCalls": ["/book/chapterinfo", "/book/bestbookmarks", "/book/readreviews", "/review/list"],
+      "skillCalls": ["/book/chapterinfo", "/book/info", "/book/getprogress", "/book/bestbookmarks", "/book/readreviews", "/review/list"],
       "warnings": []
     }
   }
@@ -127,10 +142,10 @@ event: start
 data: {"snapshotId":"..."}
 
 event: delta
-data: {"field":"reason","text":"..."}
+data: {"field":"readingAdvice","text":"..."}
 
 event: complete
-data: {"judgement":{"conclusion":"worth_deep_read","reasons":[],"keyPassages":[],"readerPerspective":"","readingAction":""}}
+data: {"readingJudgement":{"recommendation":"deep_read","masteryScore":{"overall":88,"informationDensity":82,"structuralImportance":90,"skipRisk":75},"nextMustKnow":[],"reasons":[],"keyPassages":[],"questionsForAuthor":[],"readerPerspective":"","readingAdvice":""},"judgement":{"conclusion":"worth_deep_read","reasons":[],"keyPassages":[],"readerPerspective":"","readingAction":""}}
 
 event: error
 data: {"message":"...","code":"..."}
