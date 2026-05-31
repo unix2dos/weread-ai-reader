@@ -127,6 +127,7 @@ test('buildRequestBody asks for JSON-only mastery judgement', () => {
   assert.equal(body.model, 'deepseek-v4-flash');
   assert.equal(body.stream, true);
   assert.equal(body.max_tokens, 1200);
+  assert.deepEqual(body.response_format, { type: 'json_object' });
   assert.match(body.messages[0].content, /掌握价值分/);
   assert.match(body.messages[0].content, /追问问题只给问题/);
   assert.match(body.messages[1].content, /questionsForAuthor/);

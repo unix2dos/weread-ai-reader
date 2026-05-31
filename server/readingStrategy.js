@@ -28,6 +28,7 @@ function buildRequestBody({
     stream: true,
     temperature: 0.2,
     max_tokens: MAX_OUTPUT_TOKENS,
+    response_format: { type: 'json_object' },
     messages: buildMessages({ snapshot, signalPanel })
   };
 }
