@@ -92,9 +92,9 @@ function createApp({ config, wereadClient, llmClient, logger = console }) {
     writeSse(res, 'start', { snapshotId: req.params.snapshotId });
 
     const judgementCacheKey = buildJudgementCacheKey(record);
-    const cachedJudgement = judgementCache.get(judgementCacheKey);
-    if (cachedJudgement) {
-      writeSse(res, 'complete', { judgement: cachedJudgement });
+    const cachedResult = judgementCache.get(judgementCacheKey);
+    if (cachedResult) {
+      writeSse(res, 'complete', cachedResult);
       res.end();
       return;
     }
@@ -106,7 +106,7 @@ function createApp({ config, wereadClient, llmClient, logger = console }) {
         input: buildLlmInputLog(record)
       });
 
-      let completedJudgement = null;
+      let completedResult = null;
       for await (const event of llmClient.streamShortJudgement({
         snapshot: record.snapshot,
         signalPanel: record.signalPanel,
@@ -115,13 +115,16 @@ function createApp({ config, wereadClient, llmClient, logger = console }) {
         if (event.type === 'delta') {
           writeSse(res, 'delta', { field: event.field, text: event.text });
         } else if (event.type === 'complete') {
-          completedJudgement = event.judgement;
-          writeSse(res, 'complete', { judgement: event.judgement });
+          completedResult = {
+            readingJudgement: event.readingJudgement || null,
+            judgement: event.judgement || event.readingJudgement || {}
+          };
+          writeSse(res, 'complete', completedResult);
         }
       }
 
-      if (completedJudgement) {
-        judgementCache.set(judgementCacheKey, completedJudgement);
+      if (completedResult) {
+        judgementCache.set(judgementCacheKey, completedResult);
       }
       res.end();
     } catch (err) {

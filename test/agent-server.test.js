@@ -581,6 +581,21 @@ test('streams short judgement events for a stored snapshot', async () => {
         yield { type: 'delta', field: 'readingAdvice', text: '先精读热门划线附近上下文。' };
         yield {
           type: 'complete',
+          readingJudgement: {
+            recommendation: 'deep_read',
+            masteryScore: {
+              overall: 78,
+              informationDensity: 82,
+              structuralImportance: 74,
+              skipRisk: 12
+            },
+            nextMustKnow: ['理解核心论点'],
+            reasons: ['热门划线集中在核心论点。'],
+            keyPassages: ['值得精读的关键段落'],
+            questionsForAuthor: ['这一段如何支撑全书主线？'],
+            readerPerspective: '读者普遍认为这段重要。',
+            readingAdvice: '先精读热门划线附近上下文。'
+          },
           judgement: {
             conclusion: 'worth_deep_read',
             reasons: ['热门划线集中在核心论点。'],
@@ -609,6 +624,66 @@ test('streams short judgement events for a stored snapshot', async () => {
     const text = await streamResp.text();
     assert.match(text, /event: start\ndata: \{"snapshotId":"snap_/);
     assert.match(text, /event: delta\ndata: \{"field":"readingAdvice","text":"先精读热门划线附近上下文。"\}/);
-    assert.match(text, /event: complete\ndata: \{"judgement":\{"conclusion":"worth_deep_read"/);
+    assert.match(text, /event: complete\ndata: \{"readingJudgement":\{"recommendation":"deep_read"/);
+    assert.match(text, /"judgement":\{"conclusion":"worth_deep_read"/);
+  });
+});
+
+test('caches reading judgement with compatible legacy judgement', async () => {
+  let streamCount = 0;
+  const app = createApp({
+    config: { clientToken: 'dev-token' },
+    wereadClient: createStubWeReadClient([]),
+    llmClient: {
+      async *streamShortJudgement() {
+        streamCount += 1;
+        yield {
+          type: 'complete',
+          readingJudgement: {
+            recommendation: 'quick_read',
+            masteryScore: {
+              overall: 52,
+              informationDensity: 40,
+              structuralImportance: 55,
+              skipRisk: 30
+            },
+            nextMustKnow: ['了解本章过渡作用'],
+            reasons: ['证据较少。'],
+            keyPassages: ['过渡段'],
+            questionsForAuthor: ['这一章为什么放在这里？'],
+            readerPerspective: '',
+            readingAdvice: '快读即可。'
+          },
+          judgement: {
+            conclusion: 'quick_read',
+            reasons: ['证据较少。'],
+            keyPassages: ['过渡段'],
+            readerPerspective: '',
+            readingAction: '快读即可。'
+          }
+        };
+      }
+    },
+    logger: { info() {}, warn() {}, error() {} }
+  });
+
+  await withServer(app, async (baseUrl) => {
+    const snapshotResp = await fetch(`${baseUrl}/api/reading-snapshots`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(createSnapshot())
+    });
+    const { snapshotId } = await snapshotResp.json();
+
+    const first = await fetch(`${baseUrl}/api/reading-snapshots/${snapshotId}/judgement/stream?clientToken=dev-token`);
+    const firstText = await first.text();
+    const second = await fetch(`${baseUrl}/api/reading-snapshots/${snapshotId}/judgement/stream?clientToken=dev-token`);
+    const secondText = await second.text();
+
+    assert.equal(streamCount, 1);
+    assert.match(firstText, /"readingJudgement":\{"recommendation":"quick_read"/);
+    assert.match(firstText, /"judgement":\{"conclusion":"quick_read"/);
+    assert.match(secondText, /"readingJudgement":\{"recommendation":"quick_read"/);
+    assert.match(secondText, /"judgement":\{"conclusion":"quick_read"/);
   });
 });
