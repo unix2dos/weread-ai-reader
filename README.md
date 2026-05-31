@@ -8,6 +8,20 @@
 
 当前实现刻意采用非打扰式采集：扩展只收集微信读书自然渲染出来的正文，不主动翻页、不滚动、不跳章节。因此低覆盖率时，Agent 会明确把结论标成阶段性建议，而不是假装已经读完整章。
 
+## 插件截图
+
+阅读页侧边面板会把阅读判断放在上方，热门划线和评论作为证据区放在下方。
+
+![阅读页侧边面板](docs/images/reader-panel.png)
+
+最小化后只保留 `AI` 入口，按 `Option+Q` 可以展开面板。
+
+![AI 折叠入口](docs/images/collapsed-entry.png)
+
+设置页配置本地 Agent 服务地址和 `clientToken`，clientToken 可以通过小眼睛临时显示。
+
+![扩展设置页](docs/images/options-page.png)
+
 ## 流程图
 
 ```mermaid

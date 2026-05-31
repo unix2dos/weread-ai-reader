@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760">
+  <defs>
+    <linearGradient id="pageBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f6f1df"/>
+      <stop offset="1" stop-color="#e7f0d8"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#0f172a" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="760" rx="32" fill="url(#pageBg)"/>
+  <g opacity="0.72" fill="#2f2f2f" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+    <text x="78" y="96" font-size="38" font-weight="700">经典阅读章节</text>
+    <text x="78" y="168" font-size="30">这是一段正在阅读的正文。扩展只采集自然渲染出来的内容，</text>
+    <text x="78" y="222" font-size="30">不会为了全章采集而自动翻页、滚动或跳转。</text>
+    <text x="78" y="306" font-size="30">当你继续往后读，已渲染正文会被动累计，阅读判断会说明</text>
+    <text x="78" y="360" font-size="30">当前建议是阶段性建议还是章节级建议。</text>
+    <text x="78" y="444" font-size="30">热门划线和评论作为证据区，帮助判断本章是否值得精读。</text>
+  </g>
+
+  <g transform="translate(742 54)" filter="url(#shadow)">
+    <rect width="380" height="652" rx="12" fill="#ffffff" stroke="#d7dee8"/>
+    <rect width="380" height="50" rx="12" fill="#f8fafc"/>
+    <rect y="38" width="380" height="12" fill="#f8fafc"/>
+    <text x="18" y="32" fill="#1f2937" font-size="18" font-weight="700" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">WeRead AI</text>
+    <rect x="239" y="12" width="92" height="28" rx="8" fill="#007aff"/>
+    <text x="254" y="31" fill="#ffffff" font-size="13" font-weight="700" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">↻ 本章判断</text>
+    <text x="349" y="31" fill="#334155" font-size="19" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">-</text>
+
+    <rect x="16" y="66" width="348" height="36" rx="8" fill="#dff4df"/>
+    <text x="28" y="90" fill="#166534" font-size="13" font-weight="600" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">第 3 章 · 1,588 字 · 判断完成</text>
+
+    <rect x="16" y="118" width="348" height="218" rx="10" fill="#f8fbff" stroke="#dbe7f5"/>
+    <text x="30" y="145" fill="#1f2937" font-size="16" font-weight="700" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">阅读判断</text>
+    <rect x="246" y="126" width="92" height="24" rx="8" fill="#eef6ff"/>
+    <text x="256" y="143" fill="#3c6f9f" font-size="11" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">阶段性建议</text>
+    <rect x="30" y="164" width="72" height="28" rx="8" fill="#dff0ff"/>
+    <text x="43" y="183" fill="#124c77" font-size="14" font-weight="700" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">值得精读</text>
+    <text x="30" y="217" fill="#334155" font-size="13" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">理由：热门划线集中在核心概念转折处。</text>
+    <text x="30" y="247" fill="#334155" font-size="13" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">读者视角：评论关注“为什么这里重要”。</text>
+    <text x="30" y="277" fill="#334155" font-size="13" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">阅读动作：带着一个问题继续读下一页。</text>
+
+    <text x="16" y="374" fill="#1f2937" font-size="16" font-weight="700" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">信号面板</text>
+    <text x="16" y="398" fill="#64748b" font-size="12" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">热门划线 5 条 · 划线评论 9 条 · 书评 3 条</text>
+
+    <g transform="translate(16 422)">
+      <rect width="348" height="84" rx="8" fill="#ffffff" stroke="#edf2f7"/>
+      <text x="14" y="26" fill="#334155" font-size="13" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">“这句话揭示了本章真正的问题。”</text>
+      <text x="288" y="26" fill="#94a3b8" font-size="11" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">42人</text>
+      <rect x="14" y="42" width="318" height="28" rx="6" fill="#f8fbff"/>
+      <text x="24" y="61" fill="#475569" font-size="12" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">评论：这段和前一章的伏笔连上了。</text>
+    </g>
+
+    <g transform="translate(16 522)">
+      <rect width="348" height="84" rx="8" fill="#ffffff" stroke="#edf2f7"/>
+      <text x="14" y="26" fill="#334155" font-size="13" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">“作者在这里把抽象概念落到具体场景。”</text>
+      <text x="288" y="26" fill="#94a3b8" font-size="11" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">31人</text>
+      <rect x="14" y="42" width="318" height="28" rx="6" fill="#f8fbff"/>
+      <text x="24" y="61" fill="#475569" font-size="12" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">评论：适合精读，别只看结论。</text>
+    </g>
+  </g>
+</svg>
