@@ -44,16 +44,28 @@ function createSignalPanel(overrides = {}) {
 }
 
 test('buildStrategyInput includes mastery score and author-question output requirements', () => {
+  const signalPanel = createSignalPanel();
   const input = buildStrategyInput({
     snapshot: createSnapshot(),
-    signalPanel: createSignalPanel()
+    signalPanel
   });
 
   assert.equal(input.promptVersion, PROMPT_VERSION);
   assert.equal(input.task, '判断当前章节接下来最需要掌握什么，并给出精读、快读或跳读建议。');
   assert.equal(input.chapter.capture.status, 'partial');
+  assert.equal(input.bookContext, undefined);
+  assert.equal(input.publicSignals, undefined);
+  assert.equal(input.personalSignals, undefined);
+  assert.deepEqual(input.signals, {
+    bookContext: signalPanel.bookContext,
+    publicSignals: signalPanel.publicSignals,
+    personalSignals: signalPanel.personalSignals
+  });
   assert.equal(input.outputShape.recommendation, 'deep_read | quick_read | skip_read');
   assert.equal(input.outputShape.masteryScore.overall, '0-100 掌握价值分');
+  assert.equal(input.outputShape.masteryScore.informationDensity, '0-100 信息密度分');
+  assert.equal(input.outputShape.masteryScore.structuralImportance, '0-100 结构关键性分');
+  assert.equal(input.outputShape.masteryScore.skipRisk, '0-100 可跳读风险分');
   assert.equal(input.outputShape.questionsForAuthor[0], '带着阅读的问题，不要给答案');
 });
 
@@ -69,6 +81,7 @@ test('buildRequestBody asks for JSON-only mastery judgement', () => {
   assert.match(body.messages[0].content, /掌握价值分/);
   assert.match(body.messages[0].content, /追问问题只给问题/);
   assert.match(body.messages[1].content, /questionsForAuthor/);
+  assert.match(body.messages[1].content, /"signals":\{/);
   assert.match(body.messages[1].content, /bookContext/);
 });
 
@@ -100,20 +113,39 @@ test('parseReadingJudgement normalizes score ranges and arrays', () => {
   assert.equal(judgement.readingAdvice, '先精读定义段，再快读例子。');
 });
 
+test('parseReadingJudgement accepts legacy conclusion labels as new recommendations', () => {
+  assert.equal(parseReadingJudgement(JSON.stringify({
+    recommendation: 'worth_deep_read'
+  })).recommendation, 'deep_read');
+  assert.equal(parseReadingJudgement(JSON.stringify({
+    conclusion: 'worth_deep_read'
+  })).recommendation, 'deep_read');
+});
+
 test('toLegacyJudgement maps new recommendation to existing conclusion labels', () => {
-  const legacy = toLegacyJudgement({
-    recommendation: 'deep_read',
+  const judgement = {
     reasons: ['理由'],
     keyPassages: ['段落'],
     readerPerspective: '读者视角',
     readingAdvice: '阅读建议'
-  });
+  };
 
-  assert.deepEqual(legacy, {
+  assert.deepEqual(toLegacyJudgement({
+    ...judgement,
+    recommendation: 'deep_read'
+  }), {
     conclusion: 'worth_deep_read',
     reasons: ['理由'],
     keyPassages: ['段落'],
     readerPerspective: '读者视角',
     readingAction: '阅读建议'
   });
+  assert.equal(toLegacyJudgement({
+    ...judgement,
+    recommendation: 'quick_read'
+  }).conclusion, 'quick_read');
+  assert.equal(toLegacyJudgement({
+    ...judgement,
+    recommendation: 'skip_read'
+  }).conclusion, 'skip_read');
 });

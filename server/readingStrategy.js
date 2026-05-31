@@ -64,25 +64,27 @@ function buildStrategyInput({
       capture,
       chapterText: snapshot.chapterText || ''
     },
-    bookContext: signalPanel.bookContext || {},
-    publicSignals: signalPanel.publicSignals || {
-      bestBookmarks: signalPanel.bestBookmarks || [],
-      bookmarkReviews: signalPanel.bookmarkReviews || [],
-      bookReviews: signalPanel.bookReviews || []
-    },
-    personalSignals: signalPanel.personalSignals || {
-      enabled: false,
-      bookmarks: [],
-      reviews: [],
-      underlines: []
+    signals: {
+      bookContext: signalPanel.bookContext || {},
+      publicSignals: signalPanel.publicSignals || {
+        bestBookmarks: signalPanel.bestBookmarks || [],
+        bookmarkReviews: signalPanel.bookmarkReviews || [],
+        bookReviews: signalPanel.bookReviews || []
+      },
+      personalSignals: signalPanel.personalSignals || {
+        enabled: false,
+        bookmarks: [],
+        reviews: [],
+        underlines: []
+      }
     },
     outputShape: {
       recommendation: 'deep_read | quick_read | skip_read',
       masteryScore: {
         overall: '0-100 掌握价值分',
-        informationDensity: '0-100 信息密度',
-        structuralImportance: '0-100 对理解全书结构的重要性',
-        skipRisk: '0-100 跳过本章的理解风险'
+        informationDensity: '0-100 信息密度分',
+        structuralImportance: '0-100 结构关键性分',
+        skipRisk: '0-100 可跳读风险分'
       },
       nextMustKnow: ['接下来最需要掌握的概念、区分或结构'],
       reasons: ['2-3 条只基于当前章节与信号的判断依据'],
@@ -126,7 +128,7 @@ function buildCaptureInput(snapshot, signalPanel) {
 
 function parseReadingJudgement(raw) {
   const parsed = parseJsonObject(raw);
-  const recommendation = normalizeRecommendation(parsed.recommendation);
+  const recommendation = normalizeRecommendation(parsed.recommendation || parsed.conclusion);
 
   return {
     recommendation,
@@ -186,6 +188,7 @@ function parseJsonObject(raw) {
 }
 
 function normalizeRecommendation(value) {
+  if (value === 'worth_deep_read') return 'deep_read';
   return RECOMMENDATIONS.has(value) ? value : 'quick_read';
 }
 
