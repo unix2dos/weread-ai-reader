@@ -1,0 +1,171 @@
+{
+  "samples": [
+    {
+      "id": "direction-structure",
+      "title": "方向与结构差异",
+      "snapshot": {
+        "bookId": "sample-book-1",
+        "bookTitle": "样本书：选择的结构",
+        "chapterUid": 501,
+        "chapterTitle": "第五章 方向",
+        "chapterText": "本章讨论人在关键阶段如何判断方向。作者先把方向拆成三个层次：短期机会、长期能力和可承受风险。短期机会能带来即时反馈，但不一定积累迁移能力；长期能力回报慢，却会改变后续选择边界；可承受风险决定一个人能不能把机会真正转化成行动。作者随后指出，同样努力的人会因为信息来源、家庭资源、学校平台和所在城市不同，进入完全不同的选择集合。读者需要掌握的不是哪个选择最好，而是如何看见选择背后的限制条件。",
+        "captureMode": "passive-accumulated",
+        "captureStats": {
+          "visibleTextLength": 140,
+          "accumulatedTextLength": 210,
+          "segmentCount": 2,
+          "uniqueLineCount": 4
+        }
+      },
+      "signalPanel": {
+        "chapter": {
+          "chapterUid": 501,
+          "title": "第五章 方向",
+          "chapterIdx": 5,
+          "wordCount": 2200
+        },
+        "bookContext": {
+          "bookInfo": {
+            "title": "样本书：选择的结构",
+            "author": "样本作者",
+            "newRating": 86,
+            "newRatingCount": 1200
+          },
+          "readingProgress": {
+            "progress": 35,
+            "chapterUid": 501
+          }
+        },
+        "publicSignals": {
+          "bestBookmarks": [
+            {
+              "range": "1-20",
+              "markText": "方向不是口号，而是机会、能力和风险的组合。",
+              "totalCount": 28,
+              "chapterUid": 501
+            },
+            {
+              "range": "21-45",
+              "markText": "同样努力的人，首先面对的是不同的选择集合。",
+              "totalCount": 19,
+              "chapterUid": 501
+            }
+          ],
+          "bookmarkReviews": [
+            {
+              "range": "1-20",
+              "totalCount": 3,
+              "comments": [
+                "这段把方向讲具体了，不再只是鸡汤。",
+                "短期机会和长期能力的区分很重要。"
+              ]
+            },
+            {
+              "range": "21-45",
+              "totalCount": 2,
+              "comments": [
+                "这里解释了为什么同样努力会有不同结果。"
+              ]
+            }
+          ],
+          "bookReviews": [
+            {
+              "content": "这本书适合用来理解个人选择和结构性差异之间的关系。",
+              "likeCount": 12
+            }
+          ]
+        },
+        "personalSignals": {
+          "enabled": false,
+          "bookmarks": [],
+          "reviews": [],
+          "underlines": []
+        },
+        "debug": {
+          "resolvedBookId": "sample-book-1",
+          "warnings": []
+        }
+      }
+    },
+    {
+      "id": "method-density",
+      "title": "方法与信息密度",
+      "snapshot": {
+        "bookId": "sample-book-2",
+        "bookTitle": "样本书：读书的方法",
+        "chapterUid": 302,
+        "chapterTitle": "第三章 先抓问题",
+        "chapterText": "本章讨论阅读前如何先提出问题。作者认为，问题不是为了得到一句标准答案，而是为了决定注意力放在哪里。没有问题时，读者容易被细节牵着走；有问题时，读者会主动寻找概念、证据和反例之间的关系。作者给出的步骤是：先用标题判断作者要解决的矛盾，再用小节标题找论证顺序，最后在段落里标出定义、因果和例外。这个方法适合信息密度高的章节，因为它能让读者先建立框架，再吸收细节。",
+        "captureMode": "passive-accumulated",
+        "captureStats": {
+          "visibleTextLength": 160,
+          "accumulatedTextLength": 230,
+          "segmentCount": 3,
+          "uniqueLineCount": 5
+        }
+      },
+      "signalPanel": {
+        "chapter": {
+          "chapterUid": 302,
+          "title": "第三章 先抓问题",
+          "chapterIdx": 3,
+          "wordCount": 1800
+        },
+        "bookContext": {
+          "bookInfo": {
+            "title": "样本书：读书的方法",
+            "author": "样本作者",
+            "newRating": 91,
+            "newRatingCount": 860
+          },
+          "readingProgress": {
+            "progress": 22,
+            "chapterUid": 302
+          }
+        },
+        "publicSignals": {
+          "bestBookmarks": [
+            {
+              "range": "8-30",
+              "markText": "问题不是为了立刻回答，而是为了分配注意力。",
+              "totalCount": 35,
+              "chapterUid": 302
+            },
+            {
+              "range": "44-66",
+              "markText": "先建立框架，再吸收细节。",
+              "totalCount": 22,
+              "chapterUid": 302
+            }
+          ],
+          "bookmarkReviews": [
+            {
+              "range": "8-30",
+              "totalCount": 4,
+              "comments": [
+                "这句改变了我做读书笔记的顺序。",
+                "问题先行比直接划重点更稳。"
+              ]
+            }
+          ],
+          "bookReviews": [
+            {
+              "content": "方法比较朴素，但很适合反复实践。",
+              "likeCount": 7
+            }
+          ]
+        },
+        "personalSignals": {
+          "enabled": false,
+          "bookmarks": [],
+          "reviews": [],
+          "underlines": []
+        },
+        "debug": {
+          "resolvedBookId": "sample-book-2",
+          "warnings": []
+        }
+      }
+    }
+  ]
+}

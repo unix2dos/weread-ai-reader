@@ -66,7 +66,7 @@ npm install
 export WEREAD_API_KEY="wrk-..."
 export LLM_API_KEY="sk-..."
 export LLM_API_BASE="https://opencode.ai/zen/go/v1"
-export LLM_MODEL="deepseek-v4-flash"
+export LLM_MODEL="mimo-v2.5"
 export CLIENT_TOKEN="change-me"
 export ENABLE_PERSONAL_SIGNALS="false"
 export PORT="19763"
@@ -127,3 +127,24 @@ node --check server/createApp.js server/index.js server/llmClient.js server/read
 ```
 
 加载扩展后的端到端验证建议在单独的微信读书测试窗口进行，避免干扰正在阅读的页面。
+
+## 模型评测
+
+`scripts/benchmark-models.js` 会复用正式阅读判断的 `readingStrategy`，用固定样本比较不同 OpenAI 兼容模型的速度、JSON 有效性、schema 完整度和自动质量分。
+
+```bash
+mkdir -p reports
+npm run benchmark:models -- \
+  --models mimo-v2.5,kimi-k2.6 \
+  --format markdown \
+  --timeout-ms 45000 \
+  --output reports/model-benchmark.md
+```
+
+如果服务商支持 `/models`，可以用 `--models all` 自动拉取模型列表：
+
+```bash
+npm run benchmark:models -- --models all --format markdown
+```
+
+默认读取 `LLM_API_BASE` 和 `LLM_API_KEY`，样本文件是 `scripts/fixtures/reading-strategy-samples.json`。报告里的 `TTFT Avg` 是首个模型内容 delta 到达时间，`Total Avg` 是完整结构化 JSON 返回并解析完成的时间。
