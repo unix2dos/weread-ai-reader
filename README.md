@@ -56,7 +56,7 @@ flowchart TD
 
 ## 启动服务器
 
-推荐用 `.env` + 一键脚本启动。第一次运行脚本时，如果没有 `.env`，会自动从 `.env.example` 创建一份模板。
+推荐用 `.env` + 一键脚本启动。第一次运行脚本时，如果没有 `.env` 且当前 shell 没有导出必需变量，会自动从 `.env.example` 创建一份模板。
 
 ```bash
 cp .env.example .env
@@ -68,6 +68,8 @@ cp .env.example .env
 WEREAD_API_KEY=wrk-...
 LLM_API_KEY=sk-...
 ```
+
+如果你已经在 shell、zsh 配置或其它全局环境里导出了这两个变量，本机启动不强制要求项目根目录存在 `.env`。同名的非空导出变量会优先于 `.env` 文件里的值。
 
 本机启动：
 
