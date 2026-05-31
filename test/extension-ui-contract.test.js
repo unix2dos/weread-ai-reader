@@ -21,6 +21,42 @@ test('panel puts reading judgement before signal evidence', () => {
   assert.ok(judgementIndex < signalIndex);
 });
 
+test('reading judgement renders mastery score and next must-know items', () => {
+  assert.match(contentJs, /function renderMasteryScore\(masteryScore\)/);
+  assert.match(contentJs, /掌握价值分/);
+  assert.match(contentJs, /renderList\('最需要掌握', judgement\.nextMustKnow\)/);
+  assert.match(contentCss, /\.wap-score-grid/);
+});
+
+test('reading judgement hides missing mastery score while preserving numeric zero', () => {
+  assert.match(contentJs, /masteryScore: judgement\.masteryScore \|\| null/);
+  assert.match(contentJs, /function hasNumericScore\(value\)/);
+  assert.match(contentJs, /if \(!hasNumericScore\(score\.overall\)\) return '';/);
+  assert.match(contentJs, /Number\.isFinite\(number\)/);
+});
+
+test('reading judgement renders questions for author without answer wording', () => {
+  assert.match(contentJs, /renderList\('追问问题', judgement\.questionsForAuthor\)/);
+  assert.doesNotMatch(contentJs, /<div class="wap-analysis-title">(?:作者回答|模拟作者|答案)<\/div>/);
+});
+
+test('debug fallback no longer rebuilds a divergent prompt', () => {
+  assert.doesNotMatch(contentJs, /function buildAgentRequestFallback/);
+  assert.doesNotMatch(contentJs, /server-generated-url-unavailable/);
+});
+
+test('debug request summary uses reading strategy prompt version', () => {
+  assert.doesNotMatch(contentJs, /short-judgement-v1/);
+  assert.match(contentJs, /reading-strategy-v2/);
+});
+
+test('debug unavailable agent request omits stale agent body location', () => {
+  assert.match(contentJs, /const hasServerAgentRequest = Boolean\(uploadResponse\.agentRequest\)/);
+  assert.match(contentJs, /summarizeUploadBody\(snapshot, hasServerAgentRequest\)/);
+  assert.match(contentJs, /summarizeAgentInput\(agentInput, hasServerAgentRequest\)/);
+  assert.match(contentJs, /\[\$\{placeholderLength\} chars; exact text omitted from debug summary\]/);
+});
+
 test('collapsed panel hides secondary actions to avoid squeezed controls', () => {
   assert.match(contentCss, /#weread-ai-panel\.collapsed\s+\.wap-analyze\s*\{[^}]*display:\s*none/s);
   assert.match(contentJs, /<button class="wap-collapsed-title" type="button"/);

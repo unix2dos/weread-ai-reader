@@ -1,10 +1,10 @@
 # WeRead AI Reader
 
-微信读书网页版的实时 AI 跟读助手。它把 Chrome 扩展在当前阅读页被动采集到的正文片段，和官方 WeRead Skill 返回的整本书评价、本章热门划线、划线评论一起交给本地 Agent 服务器，再由 LLM 给出实时的本章阅读价值判断。
+微信读书网页版的实时 AI 跟读助手。它把 Chrome 扩展在当前阅读页被动采集到的正文片段，和官方 WeRead Skill 返回的书籍上下文、整本书评价、本章热门划线、划线评论一起交给本地 Agent 服务器，再由 LLM 给出实时的本章阅读价值判断。
 
 ## 它解决什么问题
 
-微信读书官方 Skill 能拿到很有价值的读者信号，例如热门划线、划线评论和书评，但拿不到当前章节正文。这个项目用 Chrome 扩展补上浏览器侧可见正文，再交给服务器统一组织 Agent 请求，判断这一章是否值得精读、为什么、重点段落在哪里，以及评论区有什么共识或争议。
+微信读书官方 Skill 能拿到很有价值的读者信号，例如书籍信息、阅读进度、热门划线、划线评论和书评，但拿不到当前章节正文。这个项目用 Chrome 扩展补上浏览器侧可见正文，再交给服务器统一组织 Agent 请求，判断这一章是否值得精读、接下来最需要掌握什么、应该带着哪些问题读，以及评论区有什么共识或争议。
 
 当前实现刻意采用非打扰式采集：扩展只收集微信读书自然渲染出来的正文，不主动翻页、不滚动、不跳章节。因此低覆盖率时，Agent 会明确把结论标成阶段性建议，而不是假装已经读完整章。
 
@@ -31,7 +31,7 @@ flowchart TD
   B --> C["扩展上传阅读快照"]
   C --> D["本地 Agent 服务器校验 clientToken"]
   D --> E["服务器调用官方 WeRead Skill"]
-  E --> F["获取章节信息、热门划线、划线评论、整本书评价"]
+  E --> F["获取章节信息、书籍上下文、热门划线、划线评论、整本书评价"]
   D --> G["服务器合并正文、覆盖率、Skill 信号"]
   F --> G
   G --> H["构造完整 LLM 请求"]
@@ -68,6 +68,7 @@ export LLM_API_KEY="sk-..."
 export LLM_API_BASE="https://opencode.ai/zen/go/v1"
 export LLM_MODEL="deepseek-v4-flash"
 export CLIENT_TOKEN="change-me"
+export ENABLE_PERSONAL_SIGNALS="false"
 export PORT="19763"
 
 npm start
@@ -97,6 +98,8 @@ curl http://127.0.0.1:19763/health
 4. 面板上方流式显示阅读判断，下方证据区展示官方 Skill 信号。
 5. 调试区域可以查看摘要，并复制“完整请求”，用于确认发给 Agent/LLM 的实际内容。
 
+LLM 返回的阅读判断会包含精读/快读/跳读建议、掌握价值分、接下来最需要掌握的内容、追问问题、重点段落和读者视角。
+
 面板最小化后只显示 `AI`，按 `Option+Q` 可以展开面板。
 
 ## 数据和密钥边界
@@ -106,6 +109,8 @@ curl http://127.0.0.1:19763/health
 - `clientToken` 是扩展访问 Agent 服务器的共享访问令牌，需要和服务器环境变量 `CLIENT_TOKEN` 一致；它不是 WeRead 或 LLM API Key。
 - 调试输出会隐藏 LLM Authorization，不会把服务端密钥返回给浏览器。
 - 当前服务器是单用户开发形态，`clientToken` 是未来多用户隔离的协议边界。
+
+`ENABLE_PERSONAL_SIGNALS=true` 会把个人划线和个人想法加入章节判断输入。默认关闭时，Agent 只使用公共阅读信号、书籍上下文信号和浏览器采集到的章节正文快照。
 
 ## 当前限制
 
@@ -118,7 +123,7 @@ curl http://127.0.0.1:19763/health
 
 ```bash
 npm test
-node --check server/createApp.js server/index.js server/llmClient.js server/wereadClient.js test/agent-server.test.js extension/background.js extension/content.js extension/canvas-hook.js extension/options.js extension/popup.js
+node --check server/createApp.js server/index.js server/llmClient.js server/readingStrategy.js server/signalBuilder.js server/wereadClient.js test/agent-server.test.js test/reading-strategy.test.js extension/background.js extension/content.js extension/canvas-hook.js extension/options.js extension/popup.js
 ```
 
 加载扩展后的端到端验证建议在单独的微信读书测试窗口进行，避免干扰正在阅读的页面。

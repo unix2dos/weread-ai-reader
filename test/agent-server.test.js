@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const { once } = require('node:events');
 const http = require('node:http');
+const { Readable } = require('node:stream');
 const test = require('node:test');
 
 const { createApp } = require('../server/createApp');
@@ -48,6 +49,29 @@ function createStubWeReadClient(calls) {
           ]
         };
       }
+      if (apiName === '/book/info') {
+        return {
+          bookId: 'book-1',
+          title: '测试书',
+          author: '测试作者',
+          intro: '一本用于测试的书。',
+          category: '学习',
+          newRating: 86,
+          newRatingCount: 1200
+        };
+      }
+      if (apiName === '/book/getprogress') {
+        return {
+          bookId: 'book-1',
+          book: {
+            chapterUid: 101,
+            chapterOffset: 0,
+            progress: 25,
+            recordReadingTime: 3600
+          },
+          timestamp: 1780200000
+        };
+      }
       if (apiName === '/book/bestbookmarks') {
         return {
           items: [
@@ -79,6 +103,15 @@ function createStubWeReadClient(calls) {
       throw new Error(`Unexpected API: ${apiName}`);
     }
   };
+}
+
+function createOpenAiSseBody(contentDeltas) {
+  return Readable.from([
+    ...contentDeltas.map((content) => Buffer.from(`data: ${JSON.stringify({
+      choices: [{ delta: { content } }]
+    })}\n\n`)),
+    Buffer.from('data: [DONE]\n\n')
+  ]);
 }
 
 test('rejects snapshots with an invalid client token', async () => {
@@ -136,6 +169,11 @@ test('returns snapshot id and structured signal panel for a valid reading snapsh
     assert.equal(body.agentRequest.url, 'https://llm.example/v1/chat/completions');
     assert.equal(body.agentRequest.headers.Authorization, 'Bearer [hidden]');
     assert.equal(body.agentRequest.body.model, 'deepseek-v4-flash');
+    const requestContent = JSON.parse(body.agentRequest.body.messages[1].content);
+    assert.equal(requestContent.promptVersion, 'reading-strategy-v2');
+    assert.equal(requestContent.outputShape.recommendation, 'deep_read | quick_read | skip_read');
+    assert.equal(requestContent.outputShape.masteryScore.overall, '0-100 掌握价值分');
+    assert.equal(requestContent.outputShape.questionsForAuthor[0], '带着阅读的问题，不要给答案');
     assert.match(body.agentRequest.body.messages[1].content, /这一章讨论了如何判断一章是否值得精读/);
     assert.doesNotMatch(JSON.stringify(body.agentRequest), /test-key|dev-token/);
     assert.equal(body.signalPanel.bestBookmarks[0].markText, '值得精读的关键段落');
@@ -143,14 +181,110 @@ test('returns snapshot id and structured signal panel for a valid reading snapsh
       '这段是本章核心。',
       '这里和全书主题呼应。'
     ]);
+    assert.equal(body.signalPanel.bookContext.bookInfo.author, '测试作者');
+    assert.equal(body.signalPanel.bookContext.bookInfo.newRating, 86);
+    assert.equal(body.signalPanel.bookContext.readingProgress.progress, 25);
+    assert.equal(body.signalPanel.publicSignals.bestBookmarks[0].markText, '值得精读的关键段落');
+    assert.equal(body.signalPanel.personalSignals.enabled, false);
     assert.deepEqual(body.signalPanel.debug.skillCalls, [
       '/book/chapterinfo',
+      '/book/info',
+      '/book/getprogress',
       '/book/bestbookmarks',
       '/book/readreviews',
       '/review/list'
     ]);
     assert.equal(calls.find((call) => call.apiName === '/book/bestbookmarks').params.chapterUid, 101);
   });
+});
+
+test('llmClient streams reading advice deltas and completes with reading strategy judgement', async () => {
+  const modelContent = JSON.stringify({
+    recommendation: 'deep_read',
+    masteryScore: {
+      overall: 88,
+      informationDensity: 82,
+      structuralImportance: 90,
+      skipRisk: 75
+    },
+    nextMustKnow: ['核心概念如何支撑后文'],
+    reasons: ['热门划线集中在核心定义。'],
+    keyPassages: ['核心概念'],
+    questionsForAuthor: ['作者为什么先定义这个概念？'],
+    readerPerspective: '读者认为这里是基础。',
+    readingAdvice: '先精读定义段。'
+  });
+  const client = createLlmClient({
+    apiKey: 'test-key',
+    apiBase: 'https://llm.example/v1',
+    model: 'deepseek-v4-flash',
+    fetchImpl: async () => ({
+      ok: true,
+      body: createOpenAiSseBody([
+        modelContent.slice(0, 40),
+        modelContent.slice(40, 120),
+        modelContent.slice(120)
+      ])
+    })
+  });
+
+  const events = [];
+  for await (const event of client.streamShortJudgement({
+    snapshot: createSnapshot(),
+    signalPanel: {
+      chapter: { chapterUid: 101, wordCount: 3200 },
+      bestBookmarks: [],
+      bookmarkReviews: [],
+      bookReviews: [],
+      debug: { resolvedBookId: 'book-1' }
+    },
+    promptVersion: 'reading-strategy-v2'
+  })) {
+    events.push(event);
+  }
+
+  assert.equal(events.length, 2);
+  assert.deepEqual(events[0], {
+    type: 'delta',
+    field: 'readingAdvice',
+    text: '先精读定义段。'
+  });
+  assert.notEqual(events[0].text, modelContent);
+  assert.doesNotMatch(events[0].text, /"recommendation"/);
+  assert.equal(events[1].type, 'complete');
+  assert.equal(events[1].readingJudgement.recommendation, 'deep_read');
+  assert.equal(events[1].judgement.conclusion, 'worth_deep_read');
+});
+
+test('llmClient rejects invalid streamed JSON without yielding a validated advice delta', async () => {
+  const client = createLlmClient({
+    apiKey: 'test-key',
+    apiBase: 'https://llm.example/v1',
+    model: 'deepseek-v4-flash',
+    fetchImpl: async () => ({
+      ok: true,
+      body: createOpenAiSseBody(['{"recommendation":"deep_read"', ' invalid'])
+    })
+  });
+
+  const events = [];
+  await assert.rejects(async () => {
+    for await (const event of client.streamShortJudgement({
+      snapshot: createSnapshot(),
+      signalPanel: {
+        chapter: { chapterUid: 101, wordCount: 3200 },
+        bestBookmarks: [],
+        bookmarkReviews: [],
+        bookReviews: [],
+        debug: { resolvedBookId: 'book-1' }
+      },
+      promptVersion: 'reading-strategy-v2'
+    })) {
+      events.push(event);
+    }
+  }, /Invalid reading judgement JSON/);
+
+  assert.deepEqual(events, []);
 });
 
 test('includes passive capture metadata in the Agent request', async () => {
@@ -189,7 +323,7 @@ test('includes passive capture metadata in the Agent request', async () => {
     assert.equal(resp.status, 200);
     const body = await resp.json();
     const userContent = JSON.parse(body.agentRequest.body.messages[1].content);
-    assert.match(body.agentRequest.body.messages[0].content, /不得声称已经读完整章正文/);
+    assert.match(body.agentRequest.body.messages[0].content, /只基于当前章节正文快照、采集覆盖率/);
     assert.equal(userContent.chapter.capture.mode, 'passive-accumulated');
     assert.equal(userContent.chapter.capture.stats.segmentCount, 2);
     assert.equal(userContent.chapter.capture.status, 'partial');
@@ -221,6 +355,10 @@ test('resolves long reader ids to official book ids before fetching skill signal
       if (apiName === '/book/chapterinfo' && params.bookId === '3300060202') {
         return { chapters: [{ chapterUid: 101, title: '第一章' }] };
       }
+      if (apiName === '/book/info') return { bookId: params.bookId, title: '测试书' };
+      if (apiName === '/book/getprogress') {
+        return { bookId: params.bookId, book: { progress: 25 }, timestamp: 1780200000 };
+      }
       if (apiName === '/book/bestbookmarks') return { items: [] };
       if (apiName === '/review/list') return { reviews: [] };
       throw new Error(`Unexpected API: ${apiName}`);
@@ -244,14 +382,193 @@ test('resolves long reader ids to official book ids before fetching skill signal
     const body = await resp.json();
     assert.equal(body.signalPanel.debug.rawBookId, 'reader-long-id');
     assert.equal(body.signalPanel.debug.resolvedBookId, '3300060202');
+    assert.deepEqual(body.signalPanel.debug.resolution, {
+      from: 'reader-long-id',
+      to: '3300060202',
+      method: 'title_search'
+    });
+    assert.doesNotMatch(body.signalPanel.debug.warnings.join('\n'), /已通过书名/);
     assert.equal(calls.find((call) => call.apiName === '/book/bestbookmarks').params.bookId, '3300060202');
     assert.deepEqual(calls.map((call) => call.apiName), [
       '/book/chapterinfo',
       '/store/search',
       '/book/chapterinfo',
+      '/book/info',
+      '/book/getprogress',
       '/book/bestbookmarks',
       '/review/list'
     ]);
+  });
+});
+
+test('fetches personal signals when explicitly enabled', async () => {
+  const calls = [];
+  const app = createApp({
+    config: { clientToken: 'dev-token', enablePersonalSignals: true },
+    wereadClient: {
+      async call(apiName, params) {
+        calls.push({ apiName, params });
+        if (apiName === '/book/chapterinfo') {
+          return {
+            chapters: [
+              { chapterUid: 101, title: '第一章', wordCount: 3200, chapterIdx: 1 }
+            ]
+          };
+        }
+        if (apiName === '/book/info') return { bookId: params.bookId, title: '测试书' };
+        if (apiName === '/book/getprogress') return { bookId: params.bookId, book: { progress: 25 } };
+        if (apiName === '/book/bestbookmarks') {
+          return {
+            items: [
+              { range: '1-20', markText: '公开热门划线', totalCount: 2, chapterUid: 101 }
+            ]
+          };
+        }
+        if (apiName === '/book/readreviews') return { reviews: [] };
+        if (apiName === '/review/list') return { reviews: [] };
+        if (apiName === '/book/bookmarklist') {
+          return {
+            bookmarks: [
+              { chapterUid: 101, range: '3-8', markText: '我的书签', createTime: 1780200010 }
+            ]
+          };
+        }
+        if (apiName === '/review/list/mine') {
+          assert.deepEqual(params, { bookid: 'book-1', count: 20 });
+          return {
+            reviews: [
+              { review: { content: '我的短评', likeCount: 0, chapterUid: 101 } }
+            ]
+          };
+        }
+        if (apiName === '/book/underlines') {
+          assert.deepEqual(params, { bookId: 'book-1', chapterUid: 101, synckey: 0 });
+          return {
+            items: [
+              { chapterUid: 101, range: '9-18', markText: '我的划线', colorStyle: 2 }
+            ]
+          };
+        }
+        throw new Error(`Unexpected API: ${apiName}`);
+      }
+    },
+    llmClient: { streamShortJudgement: async function* () {} },
+    logger: { info() {}, warn() {}, error() {} }
+  });
+
+  await withServer(app, async (baseUrl) => {
+    const resp = await fetch(`${baseUrl}/api/reading-snapshots`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(createSnapshot())
+    });
+
+    assert.equal(resp.status, 200);
+    const body = await resp.json();
+    assert.equal(body.signalPanel.personalSignals.enabled, true);
+    assert.equal(body.signalPanel.personalSignals.bookmarks[0].markText, '我的书签');
+    assert.equal(body.signalPanel.personalSignals.reviews[0].content, '我的短评');
+    assert.equal(body.signalPanel.personalSignals.underlines[0].markText, '我的划线');
+    assert.deepEqual(calls.map((call) => call.apiName), [
+      '/book/chapterinfo',
+      '/book/info',
+      '/book/getprogress',
+      '/book/bestbookmarks',
+      '/book/readreviews',
+      '/review/list',
+      '/book/bookmarklist',
+      '/review/list/mine',
+      '/book/underlines'
+    ]);
+  });
+});
+
+test('keeps snapshot upload successful when personal signal calls fail', async () => {
+  const app = createApp({
+    config: { clientToken: 'dev-token', enablePersonalSignals: true },
+    wereadClient: {
+      async call(apiName, params) {
+        if (apiName === '/book/chapterinfo') {
+          return {
+            chapters: [
+              { chapterUid: 101, title: '第一章', wordCount: 3200, chapterIdx: 1 }
+            ]
+          };
+        }
+        if (apiName === '/book/info') return { bookId: params.bookId, title: '测试书' };
+        if (apiName === '/book/getprogress') return { bookId: params.bookId, book: { progress: 25 } };
+        if (apiName === '/book/bestbookmarks') return { items: [] };
+        if (apiName === '/review/list') return { reviews: [] };
+        if (apiName === '/book/bookmarklist') throw new Error('bookmarklist unavailable');
+        if (apiName === '/review/list/mine') throw new Error('mine reviews unavailable');
+        if (apiName === '/book/underlines') throw new Error('underlines unavailable');
+        throw new Error(`Unexpected API: ${apiName}`);
+      }
+    },
+    llmClient: { streamShortJudgement: async function* () {} },
+    logger: { info() {}, warn() {}, error() {} }
+  });
+
+  await withServer(app, async (baseUrl) => {
+    const resp = await fetch(`${baseUrl}/api/reading-snapshots`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(createSnapshot())
+    });
+
+    assert.equal(resp.status, 200);
+    const body = await resp.json();
+    assert.deepEqual(body.signalPanel.personalSignals, {
+      enabled: true,
+      bookmarks: [],
+      reviews: [],
+      underlines: []
+    });
+    assert.match(body.signalPanel.debug.warnings.join('\n'), /个人书签获取失败: bookmarklist unavailable/);
+    assert.match(body.signalPanel.debug.warnings.join('\n'), /个人评论获取失败: mine reviews unavailable/);
+    assert.match(body.signalPanel.debug.warnings.join('\n'), /个人划线获取失败: underlines unavailable/);
+  });
+});
+
+test('keeps snapshot upload successful when book info signal fails', async () => {
+  const app = createApp({
+    config: { clientToken: 'dev-token' },
+    wereadClient: {
+      async call(apiName, params) {
+        if (apiName === '/book/chapterinfo') {
+          return {
+            chapters: [
+              { chapterUid: 101, title: '第一章', wordCount: 3200, chapterIdx: 1 }
+            ]
+          };
+        }
+        if (apiName === '/book/info') {
+          throw new Error('book info unavailable');
+        }
+        if (apiName === '/book/getprogress') {
+          return { bookId: params.bookId, book: { progress: 25 }, timestamp: 1780200000 };
+        }
+        if (apiName === '/book/bestbookmarks') return { items: [] };
+        if (apiName === '/review/list') return { reviews: [] };
+        throw new Error(`Unexpected API: ${apiName}`);
+      }
+    },
+    llmClient: { streamShortJudgement: async function* () {} },
+    logger: { info() {}, warn() {}, error() {} }
+  });
+
+  await withServer(app, async (baseUrl) => {
+    const resp = await fetch(`${baseUrl}/api/reading-snapshots`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(createSnapshot())
+    });
+
+    assert.equal(resp.status, 200);
+    const body = await resp.json();
+    assert.deepEqual(body.signalPanel.bookContext.bookInfo, {});
+    assert.equal(body.signalPanel.bookContext.readingProgress.progress, 25);
+    assert.match(body.signalPanel.debug.warnings.join('\n'), /书籍信息获取失败: book info unavailable/);
   });
 });
 
@@ -261,9 +578,24 @@ test('streams short judgement events for a stored snapshot', async () => {
     wereadClient: createStubWeReadClient([]),
     llmClient: {
       async *streamShortJudgement() {
-        yield { type: 'delta', field: 'reason', text: '热门划线集中在核心论点。' };
+        yield { type: 'delta', field: 'readingAdvice', text: '先精读热门划线附近上下文。' };
         yield {
           type: 'complete',
+          readingJudgement: {
+            recommendation: 'deep_read',
+            masteryScore: {
+              overall: 78,
+              informationDensity: 82,
+              structuralImportance: 74,
+              skipRisk: 12
+            },
+            nextMustKnow: ['理解核心论点'],
+            reasons: ['热门划线集中在核心论点。'],
+            keyPassages: ['值得精读的关键段落'],
+            questionsForAuthor: ['这一段如何支撑全书主线？'],
+            readerPerspective: '读者普遍认为这段重要。',
+            readingAdvice: '先精读热门划线附近上下文。'
+          },
           judgement: {
             conclusion: 'worth_deep_read',
             reasons: ['热门划线集中在核心论点。'],
@@ -291,7 +623,121 @@ test('streams short judgement events for a stored snapshot', async () => {
 
     const text = await streamResp.text();
     assert.match(text, /event: start\ndata: \{"snapshotId":"snap_/);
-    assert.match(text, /event: delta\ndata: \{"field":"reason","text":"热门划线集中在核心论点。"\}/);
-    assert.match(text, /event: complete\ndata: \{"judgement":\{"conclusion":"worth_deep_read"/);
+    assert.match(text, /event: delta\ndata: \{"field":"readingAdvice","text":"先精读热门划线附近上下文。"\}/);
+    assert.match(text, /event: complete\ndata: \{"readingJudgement":\{"recommendation":"deep_read"/);
+    assert.match(text, /"judgement":\{"conclusion":"worth_deep_read"/);
+  });
+});
+
+test('caches reading judgement with compatible legacy judgement', async () => {
+  let streamCount = 0;
+  const app = createApp({
+    config: { clientToken: 'dev-token' },
+    wereadClient: createStubWeReadClient([]),
+    llmClient: {
+      async *streamShortJudgement() {
+        streamCount += 1;
+        yield {
+          type: 'complete',
+          readingJudgement: {
+            recommendation: 'quick_read',
+            masteryScore: {
+              overall: 52,
+              informationDensity: 40,
+              structuralImportance: 55,
+              skipRisk: 30
+            },
+            nextMustKnow: ['了解本章过渡作用'],
+            reasons: ['证据较少。'],
+            keyPassages: ['过渡段'],
+            questionsForAuthor: ['这一章为什么放在这里？'],
+            readerPerspective: '',
+            readingAdvice: '快读即可。'
+          },
+          judgement: {
+            conclusion: 'quick_read',
+            reasons: ['证据较少。'],
+            keyPassages: ['过渡段'],
+            readerPerspective: '',
+            readingAction: '快读即可。'
+          }
+        };
+      }
+    },
+    logger: { info() {}, warn() {}, error() {} }
+  });
+
+  await withServer(app, async (baseUrl) => {
+    const snapshotResp = await fetch(`${baseUrl}/api/reading-snapshots`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(createSnapshot())
+    });
+    const { snapshotId } = await snapshotResp.json();
+
+    const first = await fetch(`${baseUrl}/api/reading-snapshots/${snapshotId}/judgement/stream?clientToken=dev-token`);
+    const firstText = await first.text();
+    const second = await fetch(`${baseUrl}/api/reading-snapshots/${snapshotId}/judgement/stream?clientToken=dev-token`);
+    const secondText = await second.text();
+
+    assert.equal(streamCount, 1);
+    assert.match(firstText, /"readingJudgement":\{"recommendation":"quick_read"/);
+    assert.match(firstText, /"judgement":\{"conclusion":"quick_read"/);
+    assert.match(secondText, /"readingJudgement":\{"recommendation":"quick_read"/);
+    assert.match(secondText, /"judgement":\{"conclusion":"quick_read"/);
+  });
+});
+
+test('maps reading judgement to legacy judgement when stream omits legacy payload', async () => {
+  let streamCount = 0;
+  const app = createApp({
+    config: { clientToken: 'dev-token' },
+    wereadClient: createStubWeReadClient([]),
+    llmClient: {
+      async *streamShortJudgement() {
+        streamCount += 1;
+        yield {
+          type: 'complete',
+          readingJudgement: {
+            recommendation: 'deep_read',
+            masteryScore: {
+              overall: 88,
+              informationDensity: 92,
+              structuralImportance: 86,
+              skipRisk: 8
+            },
+            nextMustKnow: ['掌握核心概念'],
+            reasons: ['本章集中解释关键框架。'],
+            keyPassages: ['核心框架段落'],
+            questionsForAuthor: ['这个框架如何约束后文？'],
+            readerPerspective: '读者认为这里是主线。',
+            readingAdvice: '精读核心框架段落。'
+          }
+        };
+      }
+    },
+    logger: { info() {}, warn() {}, error() {} }
+  });
+
+  await withServer(app, async (baseUrl) => {
+    const snapshotResp = await fetch(`${baseUrl}/api/reading-snapshots`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(createSnapshot())
+    });
+    const { snapshotId } = await snapshotResp.json();
+
+    const first = await fetch(`${baseUrl}/api/reading-snapshots/${snapshotId}/judgement/stream?clientToken=dev-token`);
+    const firstText = await first.text();
+    const second = await fetch(`${baseUrl}/api/reading-snapshots/${snapshotId}/judgement/stream?clientToken=dev-token`);
+    const secondText = await second.text();
+
+    assert.equal(streamCount, 1);
+    assert.match(firstText, /"readingJudgement":\{"recommendation":"deep_read"/);
+    assert.match(firstText, /"judgement":\{"conclusion":"worth_deep_read"/);
+    assert.doesNotMatch(firstText, /"judgement":\{"recommendation":"deep_read"/);
+    assert.match(secondText, /"readingJudgement":\{"recommendation":"deep_read"/);
+    assert.match(secondText, /"judgement":\{"conclusion":"worth_deep_read"/);
+    assert.doesNotMatch(secondText, /"judgement":\{"recommendation":"deep_read"/);
   });
 });
