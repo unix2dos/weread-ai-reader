@@ -67,12 +67,15 @@ export WEREAD_API_KEY="wrk-..."
 export LLM_API_KEY="sk-..."
 export LLM_API_BASE="https://opencode.ai/zen/go/v1"
 export LLM_MODEL="mimo-v2.5"
+export LLM_FALLBACK_MODELS="kimi-k2.6,kimi-k2.5"
 export CLIENT_TOKEN="change-me"
 export ENABLE_PERSONAL_SIGNALS="false"
 export PORT="19763"
 
 npm start
 ```
+
+`LLM_MODEL` 是首选模型。`LLM_FALLBACK_MODELS` 是可选的逗号分隔列表；当首选模型遇到 429、`fetch failed`、空输出或结构化解析失败时，Agent 会继续用同一个 `LLM_API_BASE` 和 `LLM_API_KEY` 尝试下一个模型。这个 fallback 只在当前 OpenCode Go 兼容接口内部切换模型，不切换到其它 provider 或其它密钥。
 
 健康检查：
 
