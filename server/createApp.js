@@ -204,14 +204,36 @@ function normalizeSnapshot(snapshot) {
 async function buildSignalPanel(wereadClient, snapshot, logger) {
   const skillCalls = [];
   const warnings = [];
-  const chaptersResp = await callSkill(wereadClient, skillCalls, '/book/chapterinfo', {
-    bookId: snapshot.bookId
+  let skillBookId = snapshot.bookId;
+  let chaptersResp = await callSkill(wereadClient, skillCalls, '/book/chapterinfo', {
+    bookId: skillBookId
+  }).catch((err) => {
+    warnings.push(`章节目录获取失败: ${err.message}`);
+    return { chapters: [] };
   });
+
+  if ((!chaptersResp.chapters || chaptersResp.chapters.length === 0) && snapshot.bookTitle) {
+    const resolvedBookId = await resolveBookIdByTitle(wereadClient, skillCalls, snapshot.bookTitle).catch((err) => {
+      warnings.push(`通过书名解析 bookId 失败: ${err.message}`);
+      return null;
+    });
+    if (resolvedBookId && resolvedBookId !== skillBookId) {
+      warnings.push(`已通过书名将 reader id 解析为官方 bookId: ${skillBookId} -> ${resolvedBookId}`);
+      skillBookId = resolvedBookId;
+      chaptersResp = await callSkill(wereadClient, skillCalls, '/book/chapterinfo', {
+        bookId: skillBookId
+      }).catch((err) => {
+        warnings.push(`官方 bookId 章节目录获取失败: ${err.message}`);
+        return { chapters: [] };
+      });
+    }
+  }
+
   const chapter = resolveChapter(snapshot, chaptersResp.chapters || [], warnings);
   const chapterUid = chapter.chapterUid;
 
   const bestBookmarksResp = await callSkill(wereadClient, skillCalls, '/book/bestbookmarks', {
-    bookId: snapshot.bookId,
+    bookId: skillBookId,
     chapterUid: chapterUid || 0
   }).catch((err) => {
     warnings.push(`热门划线获取失败: ${err.message}`);
@@ -221,7 +243,7 @@ async function buildSignalPanel(wereadClient, snapshot, logger) {
   const bestBookmarks = normalizeBestBookmarks(bestBookmarksResp.items || [], chapterUid);
   const bookmarkReviewsResp = bestBookmarks.length > 0 && chapterUid
     ? await callSkill(wereadClient, skillCalls, '/book/readreviews', {
-      bookId: snapshot.bookId,
+      bookId: skillBookId,
       chapterUid,
       reviews: bestBookmarks.slice(0, 8).map((bookmark) => ({
         range: bookmark.range,
@@ -235,7 +257,7 @@ async function buildSignalPanel(wereadClient, snapshot, logger) {
     : { reviews: [] };
 
   const bookReviewsResp = await callSkill(wereadClient, skillCalls, '/review/list', {
-    bookId: snapshot.bookId,
+    bookId: skillBookId,
     reviewListType: 0,
     count: 8
   }).catch((err) => {
@@ -253,12 +275,15 @@ async function buildSignalPanel(wereadClient, snapshot, logger) {
     bookmarkReviews: normalizeBookmarkReviews(bookmarkReviewsResp.reviews || []),
     debug: {
       skillCalls,
+      rawBookId: snapshot.bookId,
+      resolvedBookId: skillBookId,
       warnings
     }
   };
 
   logger.info('skill_signal_built', {
     bookId: snapshot.bookId,
+    resolvedBookId: skillBookId,
     chapterUid,
     bestBookmarkCount: signalPanel.bestBookmarks.length,
     bookmarkReviewCount: signalPanel.bookmarkReviews.reduce((sum, review) => sum + review.comments.length, 0),
@@ -272,6 +297,35 @@ async function buildSignalPanel(wereadClient, snapshot, logger) {
 async function callSkill(wereadClient, skillCalls, apiName, params) {
   skillCalls.push(apiName);
   return wereadClient.call(apiName, params);
+}
+
+async function resolveBookIdByTitle(wereadClient, skillCalls, bookTitle) {
+  const resp = await callSkill(wereadClient, skillCalls, '/store/search', {
+    keyword: bookTitle,
+    count: 5
+  });
+  const books = extractSearchBooks(resp);
+  const normalizedTitle = normalizeTitle(bookTitle);
+  const exact = books.find((book) => normalizeTitle(book.title) === normalizedTitle);
+  const partial = books.find((book) => {
+    const title = normalizeTitle(book.title);
+    return title && normalizedTitle && (title.includes(normalizedTitle) || normalizedTitle.includes(title));
+  });
+  const selected = exact || partial || books[0];
+  return selected ? selected.bookId : null;
+}
+
+function extractSearchBooks(resp) {
+  return (resp.results || []).flatMap((group) => group.books || [])
+    .map((item) => item.bookInfo || item)
+    .filter((book) => book && book.bookId && book.title);
+}
+
+function normalizeTitle(value) {
+  return String(value || '')
+    .replace(/[《》]/g, '')
+    .replace(/\s+/g, '')
+    .trim();
 }
 
 function resolveChapter(snapshot, chapters, warnings) {
@@ -367,6 +421,7 @@ function buildSnapshotLog(snapshot, signalPanel, extra = {}) {
     ...extra,
     requestId: snapshot.requestId,
     bookId: snapshot.bookId,
+    resolvedBookId: signalPanel && signalPanel.debug ? signalPanel.debug.resolvedBookId : snapshot.bookId,
     bookTitle: snapshot.bookTitle,
     chapterUid: signalPanel && signalPanel.chapter ? signalPanel.chapter.chapterUid : snapshot.chapterUid,
     chapterTitle: snapshot.chapterTitle,
@@ -386,8 +441,12 @@ function buildSnapshotLog(snapshot, signalPanel, extra = {}) {
 function buildLlmInputLog(record) {
   return {
     bookId: record.snapshot.bookId,
+    resolvedBookId: record.signalPanel.debug?.resolvedBookId || record.snapshot.bookId,
+    bookTitle: record.snapshot.bookTitle,
     chapterTitle: record.snapshot.chapterTitle,
+    source: record.snapshot.source,
     chapterTextLength: record.snapshot.chapterText.length,
+    chapterTextPreview: previewText(record.snapshot.chapterText),
     contentHash: record.snapshot.contentHash,
     signalCounts: {
       bookReviews: record.signalPanel.bookReviews.length,

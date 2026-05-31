@@ -7,11 +7,17 @@
   let isExtracting = false;
   let currentSnapshotId = '';
   let judgementPort = null;
+  let canvasTextItems = [];
+  let lastCanvasSummary = null;
+
+  const MAX_CANVAS_TEXT_ITEMS = 12000;
+  const CANVAS_BATCH_EVENT = '__wereadAiCanvasTextBatch';
+  const CANVAS_REQUEST_EVENT = '__wereadAiRequestCanvasText';
 
   function log(level, message, data) {
     const prefix = '[WeRead AI]';
     if (data !== undefined) {
-      console[level](`${prefix} ${message}`, data);
+      console[level](`${prefix} ${message} ${safeJson(data)}`);
     } else {
       console[level](`${prefix} ${message}`);
     }
@@ -46,9 +52,10 @@
     });
 
     panel.querySelector('.wap-analyze').addEventListener('click', () => {
-      if (currentSnapshotId) {
-        startJudgementStream(currentSnapshotId);
-      }
+      currentSnapshotId = '';
+      currentChapterTitle = '';
+      currentChapterText = '';
+      handleNewChapter({ force: true });
     });
 
     makeDraggable(panel, panel.querySelector('.wap-header'));
@@ -217,35 +224,186 @@
   function extractChapterContent() {
     log('log', '尝试提取章节内容...');
 
+    const canvasText = extractCanvasCapturedText();
+    if (canvasText) {
+      log('log', 'canvas captured text', {
+        itemCount: canvasTextItems.length,
+        textLen: canvasText.text.length,
+        lineCount: canvasText.lineCount
+      });
+      return canvasText;
+    }
+
     const preRender = document.querySelector('#preRenderContent');
     if (preRender) {
       const html = preRender.innerHTML || '';
       const text = cleanText(stripHtml(html));
-      log('log', '#preRenderContent', { htmlLen: html.length, textLen: text.length });
-      if (text.length > 0) {
-        return { source: '#preRenderContent', html, text };
-      }
+      const result = buildValidatedTextResult('#preRenderContent', html, text);
+      if (result) return result;
     }
 
     const readerContent = document.querySelector('.readerChapterContent');
     if (readerContent) {
       const html = readerContent.innerHTML || '';
       const text = cleanText(readerContent.innerText?.trim() || stripHtml(html));
-      log('log', '.readerChapterContent', { htmlLen: html.length, textLen: text.length });
-      if (text.length > 0) {
-        return { source: '.readerChapterContent', html, text };
-      }
+      const result = buildValidatedTextResult('.readerChapterContent', html, text);
+      if (result) return result;
     }
 
     const vue = getVue();
     if (vue) {
       const html = vue.chapterContentHtml || vue.chapterContentForEPub || '';
       if (html.length > 0) {
-        return { source: 'vue.__vue__', html, text: cleanText(stripHtml(html)) };
+        const result = buildValidatedTextResult('vue.__vue__', html, cleanText(stripHtml(html)));
+        if (result) return result;
       }
     }
 
     log('warn', '所有提取方式均失败');
+    return null;
+  }
+
+  function installCanvasTextBridge() {
+    document.addEventListener(CANVAS_BATCH_EVENT, (event) => {
+      try {
+        const payload = JSON.parse(event.detail || '{}');
+        if (!Array.isArray(payload.items)) return;
+        canvasTextItems = payload.items.slice(-MAX_CANVAS_TEXT_ITEMS);
+        log('log', 'canvas text batch received', {
+          itemCount: canvasTextItems.length,
+          total: payload.total,
+          emittedAt: payload.emittedAt
+        });
+      } catch (err) {
+        log('warn', 'canvas text batch parse failed', err);
+      }
+    });
+  }
+
+  function requestCanvasTextDump() {
+    document.dispatchEvent(new CustomEvent(CANVAS_REQUEST_EVENT));
+  }
+
+  function extractCanvasCapturedText() {
+    const lines = buildCanvasLines(canvasTextItems);
+    const text = lines.join('\n').trim();
+    lastCanvasSummary = summarizeCanvasCapture(lines, text);
+    if (!looksLikeChapterText(text)) return null;
+    return {
+      source: 'canvas.fillText',
+      html: '',
+      text,
+      lineCount: lines.length
+    };
+  }
+
+  function buildCanvasLines(items) {
+    const ordered = (items || [])
+      .map(normalizeCanvasItem)
+      .filter((item) => item && isLikelyCanvasToken(item.text))
+      .sort((a, b) => a.seq - b.seq);
+
+    const rawLines = [];
+    let current = null;
+    for (const item of ordered) {
+      if (!current || shouldStartCanvasLine(current, item)) {
+        pushCanvasLine(rawLines, current);
+        current = {
+          text: item.text,
+          y: item.y,
+          lastX: item.x,
+          seq: item.seq
+        };
+      } else {
+        current.text = mergeCanvasText(current.text, item.text);
+        current.lastX = item.x;
+      }
+    }
+    pushCanvasLine(rawLines, current);
+
+    const seen = new Set();
+    return rawLines
+      .map((line) => cleanReaderLine(line))
+      .filter((line) => line && isLikelyReaderText(line))
+      .filter((line) => {
+        const key = line.replace(/\s+/g, '');
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }
+
+  function normalizeCanvasItem(item) {
+    const text = cleanReaderLine(item?.text || '');
+    if (!text) return null;
+    return {
+      seq: Number(item.seq) || 0,
+      text,
+      x: (Number(item.x) || 0) + (Number(item.tx) || 0),
+      y: (Number(item.y) || 0) + (Number(item.ty) || 0)
+    };
+  }
+
+  function shouldStartCanvasLine(current, item) {
+    if (Math.abs(current.y - item.y) > 3) return true;
+    if (item.x < current.lastX - 20) return true;
+    if (current.text.length > 220) return true;
+    return false;
+  }
+
+  function pushCanvasLine(lines, line) {
+    if (!line) return;
+    const text = cleanReaderLine(line.text);
+    if (text) lines.push(text);
+  }
+
+  function mergeCanvasText(left, right) {
+    if (!left) return right;
+    if (!right) return left;
+    if (/[\w)]$/.test(left) && /^[\w(]/.test(right)) return `${left} ${right}`;
+    return `${left}${right}`;
+  }
+
+  function cleanReaderLine(text) {
+    return String(text || '')
+      .replace(/\s+/g, ' ')
+      .replace(/[\u200b-\u200f\ufeff]/g, '')
+      .trim();
+  }
+
+  function isLikelyReaderText(text) {
+    if (!text || text.length < 2) return false;
+    if (!/[\u4e00-\u9fff]/.test(text)) return false;
+    if (/font-family|background-image|readerChapterContent|wr_whiteTheme|border-bottom|rgb\(/.test(text)) return false;
+    if (/^(微信读书书城|首页|我的书架|上一页|下一页|点击添加书签|播放|暂停|目录|推荐|一般|不行)$/.test(text)) return false;
+    if (/^(已读到|共\d+条笔记|时长\d+分钟|微信读书推荐值|阅读\d)/.test(text)) return false;
+    return true;
+  }
+
+  function isLikelyCanvasToken(text) {
+    if (!text) return false;
+    if (/font-family|background-image|readerChapterContent|wr_whiteTheme|border-bottom|rgb\(/.test(text)) return false;
+    return /[\u4e00-\u9fffA-Za-z0-9。，、；：？！“”‘’《》（）()—…]/.test(text);
+  }
+
+  function looksLikeChapterText(text) {
+    const validation = validateContent(text);
+    return text.length >= 120 && validation.looksValid;
+  }
+
+  function buildValidatedTextResult(source, html, text) {
+    const validation = validateContent(text);
+    const summary = {
+      htmlLen: html.length,
+      textLen: text.length,
+      validation,
+      preview: previewText(text)
+    };
+    if (looksLikeChapterText(text)) {
+      log('log', `${source} accepted`, summary);
+      return { source, html, text };
+    }
+    log('warn', `${source} rejected`, summary);
     return null;
   }
 
@@ -270,15 +428,22 @@
       let attempts = 0;
       function tryExtract() {
         attempts++;
-        const result = extractChapterContent();
-        if (result && result.text.length > 10) {
-          log('log', `第 ${attempts} 次尝试成功`);
-          resolve(result);
-        } else if (attempts < maxRetries) {
-          setTimeout(tryExtract, delay);
-        } else {
-          resolve(null);
-        }
+        requestCanvasTextDump();
+        setTimeout(() => {
+          const result = extractChapterContent();
+          if (result && result.text.length > 10) {
+            log('log', `第 ${attempts} 次尝试成功`, {
+              source: result.source,
+              textLen: result.text.length,
+              canvas: lastCanvasSummary
+            });
+            resolve(result);
+          } else if (attempts < maxRetries) {
+            setTimeout(tryExtract, delay);
+          } else {
+            resolve(null);
+          }
+        }, 80);
       }
       tryExtract();
     });
@@ -300,7 +465,9 @@
     }
 
     const bookEl = document.querySelector('.readerTopBar_title_link');
-    const chapterEl = document.querySelector('.readerTopBar_title_chapter');
+    const chapterEl = document.querySelector('.readerTopBar_title_chapter')
+      || document.querySelector('.renderTargetPageInfo_header_chapterTitle')
+      || document.querySelector('.readerCatalog_list_item_current .readerCatalog_list_item_title_text');
     return {
       bookTitle: bookEl ? bookEl.textContent.trim() : '(未获取到书名)',
       chapterTitle: chapterEl ? chapterEl.textContent.trim() : '(未获取到标题)',
@@ -313,7 +480,7 @@
     return match ? match[1] : '';
   }
 
-  async function handleNewChapter() {
+  async function handleNewChapter(options = {}) {
     if (isExtracting) {
       log('log', '已有提取任务进行中，跳过');
       return;
@@ -324,11 +491,16 @@
       const result = await extractWithRetry(10, 300);
       if (!result) {
         updateStatus('error', '提取失败');
+        updateDebug({
+          error: 'extraction_failed',
+          canvas: lastCanvasSummary,
+          bodyPreview: previewText(cleanText(document.body.innerText || ''))
+        });
         return;
       }
 
       const { bookTitle, chapterTitle, chapterUid } = getBookAndChapter();
-      if (chapterTitle === currentChapterTitle && result.text === currentChapterText) {
+      if (!options.force && chapterTitle === currentChapterTitle && result.text === currentChapterText) {
         log('log', '重复章节，跳过');
         return;
       }
@@ -393,6 +565,7 @@
     const body = response.body;
     currentSnapshotId = body.snapshotId;
     updateSignalPanel(body.signalPanel);
+    updateStatus('success', `已发送 ${snapshot.chapterText.length.toLocaleString()} 字，正在生成短判断...`);
     updateDebug({
       ...buildClientDebug(snapshot),
       snapshotId: body.snapshotId,
@@ -419,11 +592,13 @@
         appendJudgementDelta(message.data.text || '');
       } else if (message.event === 'complete') {
         renderJudgement(message.data.judgement || {});
+        updateStatus('success', `${currentChapterTitle} · ${currentChapterText.length.toLocaleString()} 字 · 判断完成`);
         judgementPort.disconnect();
         judgementPort = null;
       } else if (message.event === 'error') {
         const data = message.data || {};
         updateJudgementLoading(`短判断失败: ${data.message || '未知错误'}`);
+        updateStatus('error', `短判断失败: ${data.message || '未知错误'}`);
         log('error', 'SSE 连接错误', data);
         judgementPort.disconnect();
         judgementPort = null;
@@ -508,7 +683,8 @@
       chapterTextLength: snapshot.chapterText.length,
       preview: previewText(snapshot.chapterText),
       capturedAt: snapshot.capturedAt,
-      agentServerUrl: snapshot.agentServerUrl
+      agentServerUrl: snapshot.agentServerUrl,
+      canvas: lastCanvasSummary
     };
   }
 
@@ -543,10 +719,42 @@
     return div.innerHTML;
   }
 
+  function summarizeCanvasCapture(lines, text) {
+    return {
+      itemCount: canvasTextItems.length,
+      candidateLineCount: lines.length,
+      candidateTextLength: text.length,
+      candidatePreview: previewText(text),
+      sampleItems: canvasTextItems.slice(0, 20).map(summarizeCanvasItem),
+      tailItems: canvasTextItems.slice(-20).map(summarizeCanvasItem)
+    };
+  }
+
+  function summarizeCanvasItem(item) {
+    return {
+      seq: item.seq,
+      text: item.text,
+      x: item.x,
+      y: item.y,
+      tx: item.tx,
+      ty: item.ty
+    };
+  }
+
+  function safeJson(value) {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+
   function init() {
     if (!location.href.includes('weread.qq.com/web/reader/')) return;
+    installCanvasTextBridge();
     createPanel();
     setTimeout(() => {
+      requestCanvasTextDump();
       startObserving();
       startPolling();
       handleNewChapter();

@@ -1,9 +1,10 @@
 const DEFAULT_LLM_API_BASE = 'https://api.openai.com/v1';
+const DEFAULT_LLM_MODEL = 'gpt-4.1-nano';
 
 function createLlmClient({
   apiKey,
   apiBase = DEFAULT_LLM_API_BASE,
-  model = 'gpt-4o-mini',
+  model = DEFAULT_LLM_MODEL,
   fetchImpl = fetch
 }) {
   return {
@@ -63,7 +64,8 @@ function buildMessages(snapshot, signalPanel, promptVersion) {
         promptVersion,
         task: '结合官方 WeRead Skill 信号和章节正文快照，判断当前章节是否值得精读。',
         chapter: {
-          bookId: snapshot.bookId,
+          bookId: signalPanel.debug?.resolvedBookId || snapshot.bookId,
+          rawBookId: snapshot.bookId,
           bookTitle: snapshot.bookTitle,
           chapterUid: signalPanel.chapter.chapterUid,
           chapterTitle: snapshot.chapterTitle,

@@ -139,6 +139,59 @@ test('returns snapshot id and structured signal panel for a valid reading snapsh
   });
 });
 
+test('resolves long reader ids to official book ids before fetching skill signals', async () => {
+  const calls = [];
+  const wereadClient = {
+    async call(apiName, params) {
+      calls.push({ apiName, params });
+      if (apiName === '/book/chapterinfo' && params.bookId === 'reader-long-id') {
+        return { chapters: [] };
+      }
+      if (apiName === '/store/search') {
+        assert.equal(params.keyword, '测试书');
+        return {
+          results: [
+            { books: [{ bookInfo: { bookId: '3300060202', title: '测试书' } }] }
+          ]
+        };
+      }
+      if (apiName === '/book/chapterinfo' && params.bookId === '3300060202') {
+        return { chapters: [{ chapterUid: 101, title: '第一章' }] };
+      }
+      if (apiName === '/book/bestbookmarks') return { items: [] };
+      if (apiName === '/review/list') return { reviews: [] };
+      throw new Error(`Unexpected API: ${apiName}`);
+    }
+  };
+  const app = createApp({
+    config: { clientToken: 'dev-token' },
+    wereadClient,
+    llmClient: { streamShortJudgement: async function* () {} },
+    logger: { info() {}, warn() {}, error() {} }
+  });
+
+  await withServer(app, async (baseUrl) => {
+    const resp = await fetch(`${baseUrl}/api/reading-snapshots`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(createSnapshot({ bookId: 'reader-long-id' }))
+    });
+
+    assert.equal(resp.status, 200);
+    const body = await resp.json();
+    assert.equal(body.signalPanel.debug.rawBookId, 'reader-long-id');
+    assert.equal(body.signalPanel.debug.resolvedBookId, '3300060202');
+    assert.equal(calls.find((call) => call.apiName === '/book/bestbookmarks').params.bookId, '3300060202');
+    assert.deepEqual(calls.map((call) => call.apiName), [
+      '/book/chapterinfo',
+      '/store/search',
+      '/book/chapterinfo',
+      '/book/bestbookmarks',
+      '/review/list'
+    ]);
+  });
+});
+
 test('streams short judgement events for a stored snapshot', async () => {
   const app = createApp({
     config: { clientToken: 'dev-token' },

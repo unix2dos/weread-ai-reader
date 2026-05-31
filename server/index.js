@@ -24,4 +24,5 @@ const app = createApp({
 
 app.listen(config.port, () => {
   console.log(`[WeRead AI Agent] listening on http://127.0.0.1:${config.port}`);
+  console.log(`[WeRead AI Agent] LLM model: ${process.env.LLM_MODEL || 'gpt-4.1-nano'}`);
 });
