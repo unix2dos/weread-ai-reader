@@ -332,6 +332,8 @@
 
   function renderMasteryScore(masteryScore) {
     const score = masteryScore || {};
+    if (!hasNumericScore(score.overall)) return '';
+
     return `
       <div class="wap-score-panel">
         <div class="wap-score-main">
@@ -345,6 +347,12 @@
         </div>
       </div>
     `;
+  }
+
+  function hasNumericScore(value) {
+    if (value === null || value === undefined || value === '') return false;
+    const number = Number(value);
+    return Number.isFinite(number);
   }
 
   function normalizeDisplayScore(value) {
@@ -930,7 +938,7 @@
     const judgement = data?.readingJudgement || data?.judgement || {};
     return {
       recommendation: judgement.recommendation || fromLegacyConclusion(judgement.conclusion),
-      masteryScore: judgement.masteryScore || {},
+      masteryScore: judgement.masteryScore || null,
       nextMustKnow: judgement.nextMustKnow || [],
       reasons: judgement.reasons || [],
       keyPassages: judgement.keyPassages || [],
@@ -1033,6 +1041,7 @@
     const signalPanel = uploadResponse.signalPanel || {};
     const resolvedBookId = signalPanel.debug?.resolvedBookId || snapshot.bookId;
     const promptVersion = 'reading-strategy-v2';
+    const hasServerAgentRequest = Boolean(uploadResponse.agentRequest);
     const agentInput = buildAgentInputDebug(snapshot, signalPanel, promptVersion, resolvedBookId);
 
     return {
@@ -1046,7 +1055,7 @@
       browserUploadSummary: {
         method: 'POST',
         url: `${snapshot.agentServerUrl}/api/reading-snapshots`,
-        body: summarizeUploadBody(snapshot),
+        body: summarizeUploadBody(snapshot, hasServerAgentRequest),
         note: 'background.js 会在发送时追加 clientToken；此处故意不显示 token。'
       },
       judgementStreamRequest: {
@@ -1058,7 +1067,7 @@
         unavailable: true,
         note: '服务器未返回实际 LLM 请求；前端只展示 agentInputSummary，避免重建可能漂移的请求体。'
       },
-      agentInputSummary: summarizeAgentInput(agentInput),
+      agentInputSummary: summarizeAgentInput(agentInput, hasServerAgentRequest),
       responseMeta: {
         snapshotId: uploadResponse.snapshotId,
         cache: uploadResponse.cache,
@@ -1080,24 +1089,24 @@
     };
   }
 
-  function summarizeUploadBody(snapshot) {
+  function summarizeUploadBody(snapshot, hasServerAgentRequest) {
     const body = stripLocalOnlyFields(snapshot);
     return {
       ...body,
-      chapterText: `[${snapshot.chapterText.length} chars; exact text is inside agentRequest.body.messages[1].content]`,
+      chapterText: summarizeChapterText(snapshot.chapterText.length, hasServerAgentRequest),
       chapterTextLength: snapshot.chapterText.length,
       chapterTextPreview: previewText(snapshot.chapterText)
     };
   }
 
-  function summarizeAgentInput(agentInput) {
+  function summarizeAgentInput(agentInput, hasServerAgentRequest) {
     const publicSignals = agentInput.signals.publicSignals || {};
     return {
       promptVersion: agentInput.promptVersion,
       task: agentInput.task,
       chapter: {
         ...agentInput.chapter,
-        chapterText: `[${agentInput.chapter.chapterText.length} chars; exact text is inside agentRequest.body.messages[1].content]`,
+        chapterText: summarizeChapterText(agentInput.chapter.chapterText.length, hasServerAgentRequest),
         chapterTextLength: agentInput.chapter.chapterText.length,
         chapterTextPreview: previewText(agentInput.chapter.chapterText)
       },
@@ -1108,6 +1117,13 @@
       },
       outputShape: agentInput.outputShape
     };
+  }
+
+  function summarizeChapterText(placeholderLength, hasServerAgentRequest) {
+    if (hasServerAgentRequest) {
+      return `[${placeholderLength} chars; exact text is inside agentRequest.body.messages[1].content]`;
+    }
+    return `[${placeholderLength} chars; exact text omitted from debug summary]`;
   }
 
   function summarizeCanvasDebug(summary) {
