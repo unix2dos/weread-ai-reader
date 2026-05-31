@@ -16,8 +16,9 @@
 }
 
 #weread-ai-panel.collapsed {
-  width: 136px;
+  width: 58px;
   height: 42px;
+  border-radius: 21px;
 }
 
 #weread-ai-panel.collapsed .wap-body {
@@ -29,7 +30,18 @@
 }
 
 #weread-ai-panel.collapsed .wap-header {
+  justify-content: center;
+  padding: 0;
   border-bottom: none;
+}
+
+#weread-ai-panel.collapsed .wap-title,
+#weread-ai-panel.collapsed .wap-controls {
+  display: none;
+}
+
+#weread-ai-panel.collapsed .wap-collapsed-title {
+  display: block;
 }
 
 .wap-header {
@@ -48,6 +60,14 @@
   font-size: 14px;
   color: #333;
   white-space: nowrap;
+}
+
+.wap-collapsed-title {
+  display: none;
+  color: #2563eb;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 .wap-controls {
@@ -71,6 +91,9 @@
 }
 
 .wap-analyze {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   background: #007AFF;
   color: white;
 }
@@ -84,6 +107,11 @@
   min-width: 26px;
   padding: 4px 0;
   text-align: center;
+}
+
+.wap-refresh-icon {
+  font-size: 14px;
+  line-height: 1;
 }
 
 .wap-body {

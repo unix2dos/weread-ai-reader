@@ -23,6 +23,8 @@ test('panel puts reading judgement before signal evidence', () => {
 
 test('collapsed panel hides secondary actions to avoid squeezed controls', () => {
   assert.match(contentCss, /#weread-ai-panel\.collapsed\s+\.wap-analyze\s*\{[^}]*display:\s*none/s);
+  assert.match(contentJs, /<span class="wap-collapsed-title">AI<\/span>/);
+  assert.match(contentCss, /#weread-ai-panel\.collapsed\s*\{[^}]*width:\s*58px/s);
 });
 
 test('highlight evidence renders comments under the matching highlight range', () => {
@@ -34,6 +36,18 @@ test('highlight evidence renders comments under the matching highlight range', (
 test('same-chapter capture growth does not automatically rerun judgement', () => {
   assert.match(contentJs, /function updateSameChapterCaptureStatus\(/);
   assert.match(contentJs, /same_chapter_capture_updated/);
+});
+
+test('chapter judgement action uses a refresh icon and current-chapter wording', () => {
+  assert.match(contentJs, /<span class="wap-refresh-icon" aria-hidden="true">↻<\/span>/);
+  assert.match(contentJs, /<span>本章判断<\/span>/);
+  assert.doesNotMatch(contentJs, />重新判断</);
+});
+
+test('option q expands the collapsed panel without rerunning judgement', () => {
+  assert.match(contentJs, /function installKeyboardShortcuts\(panel\)/);
+  assert.match(contentJs, /event\.altKey && event\.key\.toLowerCase\(\) === 'q'/);
+  assert.match(contentJs, /expandPanel\(panel\)/);
 });
 
 test('extension defaults use the less common local agent port', () => {

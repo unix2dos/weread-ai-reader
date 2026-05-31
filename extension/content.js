@@ -36,8 +36,12 @@
     panel.innerHTML = `
       <div class="wap-header">
         <span class="wap-title">WeRead AI</span>
+        <span class="wap-collapsed-title">AI</span>
         <div class="wap-controls">
-          <button class="wap-btn wap-analyze" title="重新生成阅读判断">重新判断</button>
+          <button class="wap-btn wap-analyze" title="重新生成本章阅读判断">
+            <span class="wap-refresh-icon" aria-hidden="true">↻</span>
+            <span>本章判断</span>
+          </button>
           <button class="wap-btn wap-toggle" title="最小化">-</button>
         </div>
       </div>
@@ -65,9 +69,11 @@
 
     const toggleButton = panel.querySelector('.wap-toggle');
     toggleButton.addEventListener('click', () => {
-      const collapsed = panel.classList.toggle('collapsed');
-      toggleButton.textContent = collapsed ? '+' : '-';
-      toggleButton.title = collapsed ? '展开' : '最小化';
+      if (panel.classList.contains('collapsed')) {
+        expandPanel(panel);
+      } else {
+        collapsePanel(panel);
+      }
     });
 
     panel.querySelector('.wap-analyze').addEventListener('click', () => {
@@ -80,8 +86,36 @@
 
     panel.querySelector('.wap-debug-copy').addEventListener('click', copyFullRequest);
 
+    installKeyboardShortcuts(panel);
     makeDraggable(panel, panel.querySelector('.wap-header'));
     log('log', '面板已创建');
+  }
+
+  function collapsePanel(panel) {
+    const toggleButton = panel.querySelector('.wap-toggle');
+    panel.classList.add('collapsed');
+    toggleButton.textContent = '+';
+    toggleButton.title = '展开';
+    toggleButton.setAttribute('aria-label', '展开');
+  }
+
+  function expandPanel(panel) {
+    const toggleButton = panel.querySelector('.wap-toggle');
+    panel.classList.remove('collapsed');
+    toggleButton.textContent = '-';
+    toggleButton.title = '最小化';
+    toggleButton.setAttribute('aria-label', '最小化');
+  }
+
+  function installKeyboardShortcuts(panel) {
+    document.addEventListener('keydown', (event) => {
+      if (!(event.altKey && event.key.toLowerCase() === 'q')) return;
+      const target = event.target;
+      const tagName = target?.tagName?.toLowerCase();
+      if (tagName === 'input' || tagName === 'textarea' || target?.isContentEditable) return;
+      event.preventDefault();
+      expandPanel(panel);
+    });
   }
 
   function makeDraggable(el, handle) {
@@ -771,7 +805,7 @@
       textLength: capture.text.length,
       stats: capture.stats
     });
-    updateStatus('success', `${chapterTitle} · ${formatCaptureLength(capture.text.length, capture)} · 采集已更新，可手动重新判断`);
+    updateStatus('success', `${chapterTitle} · ${formatCaptureLength(capture.text.length, capture)} · 采集已更新，可点本章判断`);
   }
 
   async function uploadSnapshot(snapshot) {
