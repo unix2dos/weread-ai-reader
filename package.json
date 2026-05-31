@@ -5,6 +5,8 @@
   "private": true,
   "scripts": {
     "start": "node server/index.js",
+    "server": "scripts/start-server.sh",
+    "server:docker": "scripts/start-server.sh --docker",
     "test": "node --test",
     "benchmark:models": "node scripts/benchmark-models.js"
   },

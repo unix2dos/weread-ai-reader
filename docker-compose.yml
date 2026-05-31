@@ -1,0 +1,9 @@
+services:
+  weread-ai-agent:
+    build: .
+    image: weread-ai-reader-server:local
+    env_file:
+      - ${SERVER_ENV_FILE:-.env}
+    ports:
+      - "127.0.0.1:${PORT:-19763}:${PORT:-19763}"
+    restart: unless-stopped

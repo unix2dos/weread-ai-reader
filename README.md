@@ -60,19 +60,36 @@ flowchart TD
 
 ## 启动服务器
 
+推荐用 `.env` + 一键脚本启动。第一次运行脚本时，如果没有 `.env`，会自动从 `.env.example` 创建一份模板。
+
 ```bash
-npm install
+cp .env.example .env
+```
 
-export WEREAD_API_KEY="wrk-..."
-export LLM_API_KEY="sk-..."
-export LLM_API_BASE="https://opencode.ai/zen/go/v1"
-export LLM_MODEL="mimo-v2.5"
-export LLM_FALLBACK_MODELS="kimi-k2.6,kimi-k2.5"
-export CLIENT_TOKEN="change-me"
-export ENABLE_PERSONAL_SIGNALS="false"
-export PORT="19763"
+编辑 `.env`，至少填入：
 
-npm start
+```bash
+WEREAD_API_KEY=wrk-...
+LLM_API_KEY=sk-...
+```
+
+本机启动：
+
+```bash
+./scripts/start-server.sh
+```
+
+Docker 启动：
+
+```bash
+./scripts/start-server.sh --docker
+```
+
+也可以使用 npm 快捷命令：
+
+```bash
+npm run server
+npm run server:docker
 ```
 
 `LLM_MODEL` 是首选模型。`LLM_FALLBACK_MODELS` 是可选的逗号分隔列表；当首选模型遇到 429、`fetch failed`、空输出或结构化解析失败时，Agent 会继续用同一个 `LLM_API_BASE` 和 `LLM_API_KEY` 尝试下一个模型。这个 fallback 只在当前 OpenCode Go 兼容接口内部切换模型，不切换到其它 provider 或其它密钥。
