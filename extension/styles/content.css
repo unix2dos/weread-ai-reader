@@ -300,6 +300,61 @@
   font-size: 13px;
 }
 
+.wap-score-panel {
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border: 1px solid #d9e8f6;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.wap-score-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.wap-score-label {
+  color: #34536d;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.wap-score-value {
+  color: #124c77;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.wap-score-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.wap-score-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 6px;
+  border-radius: 6px;
+  background: #f4f8fc;
+  color: #34536d;
+  font-size: 12px;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.wap-score-item strong {
+  color: #496579;
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .wap-judgement-stream {
   padding: 10px 12px;
   background: #f8f9fa;

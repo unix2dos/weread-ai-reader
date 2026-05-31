@@ -312,19 +312,45 @@
           <div class="wap-section-title">阅读判断</div>
           <span class="wap-scope-badge">${escapeHtml(adviceScope)}</span>
         </div>
-        <div class="wap-verdict">${escapeHtml(labelConclusion(judgement.conclusion))}</div>
+        <div class="wap-verdict">${escapeHtml(labelRecommendation(judgement.recommendation))}</div>
+        ${renderMasteryScore(judgement.masteryScore)}
+        ${renderList('最需要掌握', judgement.nextMustKnow)}
         ${renderList('理由', judgement.reasons)}
         ${renderList('重点段落', judgement.keyPassages)}
+        ${renderList('追问问题', judgement.questionsForAuthor)}
         <div class="wap-analysis-section">
           <div class="wap-analysis-title">读者视角</div>
           <div class="wap-analysis-content">${escapeHtml(judgement.readerPerspective || '')}</div>
         </div>
         <div class="wap-analysis-section">
-          <div class="wap-analysis-title">阅读动作</div>
-          <div class="wap-analysis-content">${escapeHtml(judgement.readingAction || '')}</div>
+          <div class="wap-analysis-title">阅读建议</div>
+          <div class="wap-analysis-content">${escapeHtml(judgement.readingAdvice || '')}</div>
         </div>
       </div>
     `;
+  }
+
+  function renderMasteryScore(masteryScore) {
+    const score = masteryScore || {};
+    return `
+      <div class="wap-score-panel">
+        <div class="wap-score-main">
+          <span class="wap-score-label">掌握价值分</span>
+          <span class="wap-score-value">${escapeHtml(normalizeDisplayScore(score.overall))}</span>
+        </div>
+        <div class="wap-score-grid">
+          <div class="wap-score-item"><strong>信息密度</strong><span>${escapeHtml(normalizeDisplayScore(score.informationDensity))}</span></div>
+          <div class="wap-score-item"><strong>结构关键</strong><span>${escapeHtml(normalizeDisplayScore(score.structuralImportance))}</span></div>
+          <div class="wap-score-item"><strong>跳读风险</strong><span>${escapeHtml(normalizeDisplayScore(score.skipRisk))}</span></div>
+        </div>
+      </div>
+    `;
+  }
+
+  function normalizeDisplayScore(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return '0';
+    return String(Math.max(0, Math.min(100, Math.round(number))));
   }
 
   function renderList(title, items) {
@@ -884,7 +910,7 @@
       } else if (message.event === 'delta') {
         appendJudgementDelta(message.data.text || '');
       } else if (message.event === 'complete') {
-        renderJudgement(message.data.judgement || {});
+        renderJudgement(normalizeReadingJudgement(message.data));
         updateStatus('success', `${currentChapterTitle} · ${formatCaptureLength(currentChapterText.length, { mode: lastCaptureMode, stats: lastCaptureStats })} · 判断完成`);
         judgementPort.disconnect();
         judgementPort = null;
@@ -898,6 +924,26 @@
       }
     });
     judgementPort.postMessage({ type: 'START_JUDGEMENT_STREAM', snapshotId });
+  }
+
+  function normalizeReadingJudgement(data) {
+    const judgement = data?.readingJudgement || data?.judgement || {};
+    return {
+      recommendation: judgement.recommendation || fromLegacyConclusion(judgement.conclusion),
+      masteryScore: judgement.masteryScore || {},
+      nextMustKnow: judgement.nextMustKnow || [],
+      reasons: judgement.reasons || [],
+      keyPassages: judgement.keyPassages || [],
+      questionsForAuthor: judgement.questionsForAuthor || [],
+      readerPerspective: judgement.readerPerspective || '',
+      readingAdvice: judgement.readingAdvice || judgement.readingAction || ''
+    };
+  }
+
+  function fromLegacyConclusion(value) {
+    if (value === 'worth_deep_read') return 'deep_read';
+    if (value === 'skip_read') return 'skip_read';
+    return 'quick_read';
   }
 
   function getAgentConfig() {
@@ -1008,7 +1054,10 @@
         url: `${snapshot.agentServerUrl}/api/reading-snapshots/${uploadResponse.snapshotId}/judgement/stream?clientToken=[hidden]`,
         note: 'SSE 请求的 clientToken 故意隐藏。'
       },
-      agentRequest: uploadResponse.agentRequest || buildAgentRequestFallback(agentInput),
+      agentRequest: uploadResponse.agentRequest || {
+        unavailable: true,
+        note: '服务器未返回实际 LLM 请求；前端只展示 agentInputSummary，避免重建可能漂移的请求体。'
+      },
       agentInputSummary: summarizeAgentInput(agentInput),
       responseMeta: {
         snapshotId: uploadResponse.snapshotId,
@@ -1017,7 +1066,7 @@
         warnings: signalPanel.debug?.warnings || [],
         rawBookId: signalPanel.debug?.rawBookId || snapshot.bookId,
         resolvedBookId,
-        agentRequestSource: uploadResponse.agentRequest ? 'server' : 'client-fallback'
+        agentRequestSource: uploadResponse.agentRequest ? 'server' : 'unavailable-summary'
       },
       extractionDebug: {
         source: snapshot.source,
@@ -1042,6 +1091,7 @@
   }
 
   function summarizeAgentInput(agentInput) {
+    const publicSignals = agentInput.signals.publicSignals || {};
     return {
       promptVersion: agentInput.promptVersion,
       task: agentInput.task,
@@ -1052,9 +1102,9 @@
         chapterTextPreview: previewText(agentInput.chapter.chapterText)
       },
       signalCounts: {
-        bookReviews: agentInput.signals.bookReviews.length,
-        bestBookmarks: agentInput.signals.bestBookmarks.length,
-        bookmarkReviews: agentInput.signals.bookmarkReviews.length
+        bookReviews: (publicSignals.bookReviews || []).length,
+        bestBookmarks: (publicSignals.bestBookmarks || []).length,
+        bookmarkReviews: (publicSignals.bookmarkReviews || []).length
       },
       outputShape: agentInput.outputShape
     };
@@ -1073,11 +1123,12 @@
   function buildAgentInputDebug(snapshot, signalPanel, promptVersion, resolvedBookId) {
     return {
       promptVersion,
-      task: '结合官方 WeRead Skill 信号和章节正文快照，判断当前章节是否值得精读。',
+      task: '判断当前章节接下来最需要掌握什么，并给出精读、快读或跳读建议。',
       chapter: {
         bookId: resolvedBookId,
         rawBookId: snapshot.bookId,
         bookTitle: snapshot.bookTitle,
+        chapterIdx: signalPanel.chapter?.chapterIdx,
         chapterUid: signalPanel.chapter?.chapterUid || snapshot.chapterUid,
         chapterTitle: snapshot.chapterTitle,
         expectedWordCount: signalPanel.chapter?.wordCount || null,
@@ -1085,16 +1136,33 @@
         chapterText: snapshot.chapterText
       },
       signals: {
-        bookReviews: signalPanel.bookReviews || [],
-        bestBookmarks: signalPanel.bestBookmarks || [],
-        bookmarkReviews: signalPanel.bookmarkReviews || []
+        bookContext: signalPanel.bookContext || {},
+        publicSignals: signalPanel.publicSignals || {
+          bestBookmarks: signalPanel.bestBookmarks || [],
+          bookmarkReviews: signalPanel.bookmarkReviews || [],
+          bookReviews: signalPanel.bookReviews || []
+        },
+        personalSignals: signalPanel.personalSignals || {
+          enabled: false,
+          bookmarks: [],
+          reviews: [],
+          underlines: []
+        }
       },
       outputShape: {
-        conclusion: 'worth_deep_read | quick_read | skip_read',
-        reasons: ['2-3 条证据'],
-        keyPassages: ['3-5 条热门划线或正文片段'],
+        recommendation: 'deep_read | quick_read | skip_read',
+        masteryScore: {
+          overall: '0-100 掌握价值分',
+          informationDensity: '0-100 信息密度分',
+          structuralImportance: '0-100 结构关键性分',
+          skipRisk: '0-100 可跳读风险分'
+        },
+        nextMustKnow: ['1-4 条接下来最需要掌握的概念、区分或结构'],
+        reasons: ['2-3 条只基于当前章节与信号的判断依据'],
+        keyPassages: ['3-5 条热门划线或已采集正文片段'],
+        questionsForAuthor: ['带着阅读的问题，不要给答案'],
         readerPerspective: '评论中的共识、争议、误读或补充',
-        readingAction: '接下来精读哪部分、带着什么问题读'
+        readingAdvice: '接下来精读、快读或跳读的具体方式'
       }
     };
   }
@@ -1135,37 +1203,6 @@
     return 'partial';
   }
 
-  function buildAgentRequestFallback(agentInput) {
-    return {
-      method: 'POST',
-      url: '[server-generated-url-unavailable]',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer [hidden]'
-      },
-      body: {
-        stream: true,
-        temperature: 0.2,
-        messages: [
-          {
-            role: 'system',
-            content: [
-              '你是微信读书实时跟读助手，只做本章阅读价值判断。',
-              '必须输出 JSON，不要输出 Markdown。',
-              'JSON 字段：conclusion, reasons, keyPassages, readerPerspective, readingAction。',
-              'conclusion 只能是 worth_deep_read、quick_read 或 skip_read。'
-            ].join('\n')
-          },
-          {
-            role: 'user',
-            content: JSON.stringify(agentInput)
-          }
-        ]
-      },
-      note: '服务器未返回精确 LLM 请求时的前端兜底调试体。'
-    };
-  }
-
   function previewText(text) {
     const normalized = text.replace(/\s+/g, ' ').trim();
     if (normalized.length <= 160) return normalized;
@@ -1176,8 +1213,8 @@
     return items.reduce((sum, item) => sum + (item.comments ? item.comments.length : 0), 0);
   }
 
-  function labelConclusion(value) {
-    if (value === 'worth_deep_read') return '值得精读';
+  function labelRecommendation(value) {
+    if (value === 'deep_read') return '值得精读';
     if (value === 'skip_read') return '可跳读';
     return '可快读';
   }
