@@ -75,16 +75,28 @@ function renderSummaryState(summaryState) {
 
 function renderStatus(status) {
   statusEl.className = `status ${status.type || 'waiting'}`;
-  statusEl.textContent = status.text || '等待';
+  statusEl.textContent = formatPopupStatusText(status);
+}
+
+function formatPopupStatusText(status) {
+  const text = String(status?.text || '等待').trim();
+  if (!text) return '等待';
+  if (status?.type === 'error') return text;
+
+  const parts = text.split(' · ').map((part) => part.trim()).filter(Boolean);
+  const compacted = parts.length ? parts[parts.length - 1] : text;
+  const sentPrefix = compacted.match(/^已发送 [^，]+，(.+)$/);
+  const statusText = sentPrefix ? sentPrefix[1] : compacted;
+  return statusText.replace('可点本章判断', '可刷新阅读判断');
 }
 
 async function requestCurrentChapterJudgement() {
   analyzeChapterBtn.disabled = true;
-  renderStatus({ type: 'waiting', text: '正在请求本章判断...' });
+  renderStatus({ type: 'waiting', text: '正在请求刷新阅读判断...' });
   try {
     const response = await chrome.runtime.sendMessage({ type: 'REQUEST_CURRENT_CHAPTER_JUDGEMENT' });
-    if (!response?.ok) throw new Error(response?.error?.message || '请求本章判断失败');
-    renderStatus({ type: 'waiting', text: '已请求本章判断，等待生成...' });
+    if (!response?.ok) throw new Error(response?.error?.message || '请求刷新阅读判断失败');
+    renderStatus({ type: 'waiting', text: '已请求刷新阅读判断，等待生成...' });
   } catch (err) {
     renderStatus({ type: 'error', text: err.message });
   } finally {
