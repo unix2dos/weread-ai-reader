@@ -58,14 +58,18 @@
         min-height: 34px;
         padding: 8px 10px;
         margin-bottom: 8px;
-        border: 1px solid transparent;
+        border: 1px solid #cfe2ff;
         border-radius: 6px;
+        background: #edf5ff;
+        color: #1769aa;
         cursor: pointer;
         font: inherit;
+        font-weight: 600;
       }
 
       .btn-primary {
         background: #007aff;
+        border-color: #007aff;
         color: white;
         font-weight: 700;
       }
@@ -74,11 +78,6 @@
         background: #edf5ff;
         border-color: #cfe2ff;
         color: #1769aa;
-      }
-
-      .btn-muted {
-        background: #f2f4f7;
-        color: #475467;
       }
 
       .divider {
@@ -96,13 +95,13 @@
 
     <div class="status waiting" id="popup-status">检查配置中...</div>
 
-    <button class="btn btn-primary" id="analyze-chapter" type="button">本章判断</button>
-    <button class="btn btn-secondary" id="open-summary" type="button">打开摘要窗口</button>
+    <button class="btn btn-primary" id="open-summary" type="button">打开摘要窗口</button>
+    <button class="btn btn-secondary" id="analyze-chapter" type="button">刷新阅读判断</button>
 
     <div class="divider"></div>
 
-    <button class="btn btn-muted" id="open-settings" type="button">打开设置</button>
-    <button class="btn btn-muted" id="clear-cache" type="button">清除缓存</button>
+    <button class="btn btn-secondary" id="open-settings" type="button">打开设置</button>
+    <button class="btn btn-secondary" id="clear-cache" type="button">清除缓存</button>
 
     <script src="popup.js"></script>
   </body>

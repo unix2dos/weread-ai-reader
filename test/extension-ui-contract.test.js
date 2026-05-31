@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
+const vm = require('node:vm');
 
 const repoRoot = path.join(__dirname, '..');
 const contentJs = fs.readFileSync(path.join(repoRoot, 'extension/content.js'), 'utf8');
@@ -10,6 +11,7 @@ const backgroundJs = fs.readFileSync(path.join(repoRoot, 'extension/background.j
 const optionsJs = fs.readFileSync(path.join(repoRoot, 'extension/options.js'), 'utf8');
 const popupJs = fs.readFileSync(path.join(repoRoot, 'extension/popup.js'), 'utf8');
 const optionsHtml = fs.readFileSync(path.join(repoRoot, 'extension/options.html'), 'utf8');
+const popupHtml = fs.readFileSync(path.join(repoRoot, 'extension/popup.html'), 'utf8');
 const summaryHtmlPath = path.join(repoRoot, 'extension/summary.html');
 const summaryJsPath = path.join(repoRoot, 'extension/summary.js');
 const summaryCssPath = path.join(repoRoot, 'extension/styles/summary.css');
@@ -17,6 +19,64 @@ const summaryHtml = fs.existsSync(summaryHtmlPath) ? fs.readFileSync(summaryHtml
 const summaryJs = fs.existsSync(summaryJsPath) ? fs.readFileSync(summaryJsPath, 'utf8') : '';
 const summaryCss = fs.existsSync(summaryCssPath) ? fs.readFileSync(summaryCssPath, 'utf8') : '';
 const manifestJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'extension/manifest.json'), 'utf8'));
+
+function loadSummaryInternals() {
+  const sandbox = {
+    chrome: {
+      runtime: {
+        onMessage: { addListener() {} },
+        sendMessage() { return Promise.resolve({}); }
+      }
+    },
+    document: {
+      addEventListener() {},
+      querySelector() { return null; }
+    },
+    setInterval() { return 0; },
+    window: {
+      addEventListener() {},
+      screenX: 0,
+      screenY: 0,
+      outerWidth: 0,
+      outerHeight: 0
+    }
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(
+    summaryJs.replace(/\}\)\(\);\s*$/, 'globalThis.__summaryInternals = { formatSummaryStatusText };})();'),
+    sandbox
+  );
+  return sandbox.__summaryInternals;
+}
+
+function loadPopupInternals() {
+  const sandbox = {
+    chrome: {
+      storage: { local: { get() { return Promise.resolve({}); } } },
+      runtime: {
+        onMessage: { addListener() {} },
+        sendMessage() { return Promise.resolve({}); },
+        openOptionsPage() {}
+      }
+    },
+    document: {
+      addEventListener() {},
+      getElementById() {
+        return {
+          addEventListener() {},
+          className: '',
+          textContent: ''
+        };
+      }
+    }
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(
+    popupJs.replace(/\s*function normalizeAgentConfig/, '\nglobalThis.__popupInternals = { formatPopupStatusText };\nfunction normalizeAgentConfig'),
+    sandbox
+  );
+  return sandbox.__popupInternals;
+}
 
 test('content script runs headlessly without visible page UI', () => {
   assert.doesNotMatch(contentJs, /<button class="wap-collapsed-title" type="button"/);
@@ -52,6 +112,7 @@ test('background owns the independent summary window lifecycle', () => {
 test('summary window renders reading judgement, reading signals, and debug separately', () => {
   assert.match(summaryHtml, /id="summary-status"/);
   assert.match(summaryHtml, /id="summary-analyze"/);
+  assert.match(summaryHtml, />刷新阅读判断<\/button>/);
   assert.match(summaryHtml, /id="summary-judgement"/);
   assert.match(summaryHtml, /id="summary-evidence"/);
   assert.match(summaryHtml, /<script src="summary\.js"><\/script>/);
@@ -75,8 +136,30 @@ test('summary window renders reading judgement, reading signals, and debug separ
   assert.match(summaryCss, /\.summary-debug-panel/);
 });
 
+test('summary header status displays only status wording', () => {
+  const { formatSummaryStatusText } = loadSummaryInternals();
+
+  assert.equal(
+    formatSummaryStatusText({
+      status: { text: '第六章 多多益善 —— 消费主义的病毒式泛滥 · 正文采集 14,839 字 / 官方 24,672 字 · 覆盖约 60% · 被动累计 · 判断完成' }
+    }),
+    '判断完成'
+  );
+  assert.equal(
+    formatSummaryStatusText({
+      status: { text: '第六章 多多益善 —— 消费主义的病毒式泛滥 · 已发送 14,839 字，正在生成阅读判断...' }
+    }),
+    '正在生成阅读判断...'
+  );
+  assert.equal(
+    formatSummaryStatusText({
+      status: { text: '第六章 多多益善 —— 消费主义的病毒式泛滥 · 14,839 字 · 采集已更新，可点本章判断' }
+    }),
+    '采集已更新，可刷新阅读判断'
+  );
+});
+
 test('extension toolbar popup is the control console', () => {
-  const popupHtml = fs.readFileSync(path.join(repoRoot, 'extension/popup.html'), 'utf8');
   assert.match(popupHtml, /id="popup-status"/);
   assert.match(popupHtml, /id="popup-context"/);
   assert.match(popupHtml, /id="analyze-chapter"/);
@@ -89,6 +172,49 @@ test('extension toolbar popup is the control console', () => {
   assert.match(popupJs, /function renderSummaryState\(summaryState\)/);
   assert.match(popupJs, /function requestCurrentChapterJudgement\(\)/);
   assert.doesNotMatch(popupJs, /chrome\.storage\.local\.remove\(\[SUMMARY_STATE_STORAGE_KEY/);
+});
+
+test('popup status displays only status wording', () => {
+  const { formatPopupStatusText } = loadPopupInternals();
+
+  assert.equal(
+    formatPopupStatusText({
+      type: 'success',
+      text: '第六章 多多益善 —— 消费主义的病毒式泛滥 · 14,839 字 · 被动累计 · 2 段 · 判断完成'
+    }),
+    '判断完成'
+  );
+  assert.equal(
+    formatPopupStatusText({
+      type: 'success',
+      text: '第六章 多多益善 —— 消费主义的病毒式泛滥 · 正文采集 14,839 字 / 官方 24,672 字 · 覆盖约 60% · 被动累计 · 判断完成'
+    }),
+    '判断完成'
+  );
+  assert.equal(
+    formatPopupStatusText({
+      type: 'waiting',
+      text: '第六章 多多益善 —— 消费主义的病毒式泛滥 · 已发送 14,839 字，正在生成阅读判断...'
+    }),
+    '正在生成阅读判断...'
+  );
+  assert.equal(
+    formatPopupStatusText({
+      type: 'success',
+      text: '第六章 多多益善 —— 消费主义的病毒式泛滥 · 14,839 字 · 采集已更新，可点本章判断'
+    }),
+    '采集已更新，可刷新阅读判断'
+  );
+});
+
+test('popup actions highlight opening the summary window', () => {
+  const actionBlock = popupHtml.match(/<button class="btn btn-primary" id="open-summary"[\s\S]*?<button class="btn btn-secondary" id="clear-cache"[^>]*>清除缓存<\/button>/);
+  assert.ok(actionBlock, 'popup actions should put open-summary first and use one primary plus secondary buttons');
+  assert.match(actionBlock[0], /id="open-summary"[^>]*>打开摘要窗口<\/button>/);
+  assert.match(actionBlock[0], /class="btn btn-secondary" id="analyze-chapter"[^>]*>刷新阅读判断<\/button>/);
+  assert.match(actionBlock[0], /class="btn btn-secondary" id="open-settings"[^>]*>打开设置<\/button>/);
+  assert.match(actionBlock[0], /class="btn btn-secondary" id="clear-cache"[^>]*>清除缓存<\/button>/);
+  assert.doesNotMatch(popupHtml, /btn-muted/);
 });
 
 test('summary judgement keeps agent analysis fields together', () => {

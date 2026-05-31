@@ -77,7 +77,20 @@
     if (!statusEl) return;
     const status = state.status || DEFAULT_STATE.status;
     statusEl.className = `summary-status ${escapeClassName(status.type || 'waiting')}`;
-    statusEl.textContent = status.text || '等待';
+    statusEl.textContent = formatSummaryStatusText(state);
+  }
+
+  function formatSummaryStatusText(state) {
+    const status = state?.status || DEFAULT_STATE.status;
+    const text = String(status.text || '等待').trim();
+    if (!text) return '等待';
+    if (status.type === 'error') return text;
+
+    const parts = text.split(' · ').map((part) => part.trim()).filter(Boolean);
+    const compacted = parts.length ? parts[parts.length - 1] : text;
+    const sentPrefix = compacted.match(/^已发送 [^，]+，(.+)$/);
+    const statusText = sentPrefix ? sentPrefix[1] : compacted;
+    return statusText.replace('可点本章判断', '可刷新阅读判断');
   }
 
   function renderContext(state) {

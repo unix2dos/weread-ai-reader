@@ -71,6 +71,7 @@ body {
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .summary-action-button:disabled {
