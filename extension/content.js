@@ -2,6 +2,7 @@
   'use strict';
 
   let currentChapterTitle = '';
+  let currentChapterKey = '';
   let currentChapterText = '';
   let extractionCount = 0;
   let isExtracting = false;
@@ -10,6 +11,7 @@
   let canvasTextItems = [];
   let lastCanvasSummary = null;
   let lastFullRequestText = '';
+  let lastSignalPanel = null;
   let chapterCapture = null;
   let lastCaptureMode = 'active-visible';
   let lastCaptureStats = {};
@@ -35,14 +37,14 @@
       <div class="wap-header">
         <span class="wap-title">WeRead AI</span>
         <div class="wap-controls">
-          <button class="wap-btn wap-analyze" title="重新生成短判断">重新判断</button>
+          <button class="wap-btn wap-analyze" title="重新生成阅读判断">重新判断</button>
           <button class="wap-btn wap-toggle" title="最小化">-</button>
         </div>
       </div>
       <div class="wap-body">
         <div class="wap-status">等待章节加载...</div>
-        <div class="wap-signal-panel"></div>
         <div class="wap-judgement"></div>
+        <div class="wap-signal-panel"></div>
         <details class="wap-debug">
           <summary>调试</summary>
           <div class="wap-debug-actions">
@@ -61,13 +63,17 @@
 
     document.body.appendChild(panel);
 
-    panel.querySelector('.wap-toggle').addEventListener('click', () => {
-      panel.classList.toggle('collapsed');
+    const toggleButton = panel.querySelector('.wap-toggle');
+    toggleButton.addEventListener('click', () => {
+      const collapsed = panel.classList.toggle('collapsed');
+      toggleButton.textContent = collapsed ? '+' : '-';
+      toggleButton.title = collapsed ? '展开' : '最小化';
     });
 
     panel.querySelector('.wap-analyze').addEventListener('click', () => {
       currentSnapshotId = '';
       currentChapterTitle = '';
+      currentChapterKey = '';
       currentChapterText = '';
       handleNewChapter({ force: true });
     });
@@ -124,43 +130,51 @@
         ${renderCaptureMeta(signalPanel.chapter)}
         ${renderAdviceScopeMeta(signalPanel.chapter)}
         ${renderWarnings(warnings)}
-        ${renderBestBookmarks(bestBookmarks)}
-        ${renderBookmarkReviews(bookmarkReviews)}
+        ${renderHighlightEvidence(bestBookmarks, bookmarkReviews)}
         ${renderBookReviews(bookReviews)}
       </div>
     `;
   }
 
-  function renderBestBookmarks(items) {
-    if (items.length === 0) return '<div class="wap-hint">暂无本章热门划线</div>';
+  function renderHighlightEvidence(bestBookmarks, bookmarkReviews) {
+    if (bestBookmarks.length === 0) return '<div class="wap-hint">暂无本章热门划线</div>';
+    const reviewsByRange = buildReviewsByRange(bookmarkReviews);
     return `
       <div class="wap-section-title">热门划线</div>
       <ul class="wap-highlights">
-        ${items.slice(0, 5).map((item) => `
-          <li>
-            <span class="wap-hl-text">${escapeHtml(item.markText)}</span>
-            <span class="wap-hl-count">${Number(item.totalCount || 0)}人</span>
+        ${bestBookmarks.slice(0, 5).map((item) => {
+          const review = reviewsByRange.get(item.range);
+          return `
+          <li class="wap-highlight-item">
+            <div class="wap-highlight-row">
+              <span class="wap-hl-text">${escapeHtml(item.markText)}</span>
+              <span class="wap-hl-count">${Number(item.totalCount || 0)}人</span>
+            </div>
+            ${renderHighlightComments(review)}
           </li>
-        `).join('')}
+        `;
+        }).join('')}
       </ul>
     `;
   }
 
-  function renderBookmarkReviews(items) {
-    const rows = items
-      .filter((item) => item.comments && item.comments.length > 0)
-      .slice(0, 3);
-    if (rows.length === 0) return '';
+  function buildReviewsByRange(bookmarkReviews) {
+    return new Map((bookmarkReviews || [])
+      .filter((item) => item.range)
+      .map((item) => [item.range, item]));
+  }
+
+  function renderHighlightComments(review) {
+    if (!review || !review.comments || review.comments.length === 0) {
+      return '<div class="wap-hl-no-comments">暂无划线评论</div>';
+    }
     return `
-      <div class="wap-section-title">划线评论</div>
-      ${rows.map((item) => `
-        <div class="wap-review-block">
-          <div class="wap-meta">range ${escapeHtml(item.range)} · ${Number(item.totalCount || 0)} 条</div>
-          <ul class="wap-comments">
-            ${item.comments.slice(0, 3).map((comment) => `<li>${escapeHtml(comment)}</li>`).join('')}
-          </ul>
-        </div>
-      `).join('')}
+      <div class="wap-highlight-comments">
+        <div class="wap-meta">评论 ${Number(review.totalCount || review.comments.length)} 条</div>
+        <ul class="wap-comments">
+          ${review.comments.slice(0, 3).map((comment) => `<li>${escapeHtml(comment)}</li>`).join('')}
+        </ul>
+      </div>
     `;
   }
 
@@ -197,7 +211,12 @@
   function updateJudgementLoading(text) {
     const el = document.querySelector('#weread-ai-panel .wap-judgement');
     if (!el) return;
-    el.innerHTML = `<div class="wap-loading">${escapeHtml(text)}</div>`;
+    el.innerHTML = `
+      <div class="wap-section wap-judgement-card">
+        <div class="wap-section-title">阅读判断</div>
+        <div class="wap-loading">${escapeHtml(text)}</div>
+      </div>
+    `;
   }
 
   function appendJudgementDelta(text) {
@@ -206,8 +225,8 @@
     let streamEl = el.querySelector('.wap-judgement-stream');
     if (!streamEl) {
       el.innerHTML = `
-        <div class="wap-section">
-          <div class="wap-section-title">短判断</div>
+        <div class="wap-section wap-judgement-card">
+          <div class="wap-section-title">阅读判断</div>
           <div class="wap-judgement-stream"></div>
         </div>
       `;
@@ -219,10 +238,13 @@
   function renderJudgement(judgement) {
     const el = document.querySelector('#weread-ai-panel .wap-judgement');
     if (!el) return;
+    const adviceScope = buildAdviceScopeText(lastExpectedChapterWordCount, currentChapterText.length, lastCaptureMode) || '实时建议';
     el.innerHTML = `
       <div class="wap-section wap-judgement-card">
-        <div class="wap-section-title">短判断</div>
-        <div class="wap-meta">${escapeHtml(buildAdviceScopeText(lastExpectedChapterWordCount, currentChapterText.length, lastCaptureMode) || '实时建议')}</div>
+        <div class="wap-judgement-heading">
+          <div class="wap-section-title">阅读判断</div>
+          <span class="wap-scope-badge">${escapeHtml(adviceScope)}</span>
+        </div>
         <div class="wap-verdict">${escapeHtml(labelConclusion(judgement.conclusion))}</div>
         ${renderList('理由', judgement.reasons)}
         ${renderList('重点段落', judgement.keyPassages)}
@@ -671,13 +693,26 @@
         visibleText: result.text
       });
       const chapterText = capture.text;
+      const chapterKey = buildChapterCaptureKey({ bookId, chapterUid, chapterTitle });
 
-      if (!options.force && chapterTitle === currentChapterTitle && chapterText === currentChapterText) {
+      if (!options.force && chapterKey === currentChapterKey && chapterText === currentChapterText) {
         log('log', '重复章节，跳过');
         return;
       }
 
+      if (!options.force && chapterKey === currentChapterKey) {
+        currentChapterText = chapterText;
+        lastCaptureMode = capture.mode;
+        lastCaptureStats = capture.stats;
+        updateSameChapterCaptureStatus({ chapterTitle, capture });
+        if (lastSignalPanel) {
+          updateSignalPanel(lastSignalPanel);
+        }
+        return;
+      }
+
       currentChapterTitle = chapterTitle;
+      currentChapterKey = chapterKey;
       currentChapterText = chapterText;
       lastCaptureMode = capture.mode;
       lastCaptureStats = capture.stats;
@@ -729,6 +764,16 @@
     };
   }
 
+  function updateSameChapterCaptureStatus({ chapterTitle, capture }) {
+    log('log', 'same_chapter_capture_updated', {
+      chapterTitle,
+      mode: capture.mode,
+      textLength: capture.text.length,
+      stats: capture.stats
+    });
+    updateStatus('success', `${chapterTitle} · ${formatCaptureLength(capture.text.length, capture)} · 采集已更新，可手动重新判断`);
+  }
+
   async function uploadSnapshot(snapshot) {
     updateStatus('waiting', '正在发送阅读快照...');
 
@@ -743,8 +788,9 @@
 
     const body = response.body;
     currentSnapshotId = body.snapshotId;
+    lastSignalPanel = body.signalPanel;
     updateSignalPanel(body.signalPanel);
-    updateStatus('success', `已发送 ${formatCaptureLength(snapshot.chapterText.length, snapshot)}，正在生成短判断...`);
+    updateStatus('success', `已发送 ${formatCaptureLength(snapshot.chapterText.length, snapshot)}，正在生成阅读判断...`);
     updateFullRequestDebug(buildFullRequestDebug(snapshot, body));
     updateDebug({
       ...buildClientDebug(snapshot),
@@ -762,12 +808,12 @@
       judgementPort = null;
     }
 
-    updateJudgementLoading('正在生成短判断...');
+    updateJudgementLoading('正在生成阅读判断...');
     judgementPort = chrome.runtime.connect({ name: 'judgement-stream' });
     judgementPort.onMessage.addListener((message) => {
       if (message.type !== 'sse') return;
       if (message.event === 'start') {
-        updateJudgementLoading('短判断流已连接...');
+        updateJudgementLoading('阅读判断流已连接...');
       } else if (message.event === 'delta') {
         appendJudgementDelta(message.data.text || '');
       } else if (message.event === 'complete') {
@@ -777,8 +823,8 @@
         judgementPort = null;
       } else if (message.event === 'error') {
         const data = message.data || {};
-        updateJudgementLoading(`短判断失败: ${data.message || '未知错误'}`);
-        updateStatus('error', `短判断失败: ${data.message || '未知错误'}`);
+        updateJudgementLoading(`阅读判断失败: ${data.message || '未知错误'}`);
+        updateStatus('error', `阅读判断失败: ${data.message || '未知错误'}`);
         log('error', 'SSE 连接错误', data);
         judgementPort.disconnect();
         judgementPort = null;

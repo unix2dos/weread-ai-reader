@@ -16,12 +16,20 @@
 }
 
 #weread-ai-panel.collapsed {
-  width: 160px;
-  height: 44px;
+  width: 136px;
+  height: 42px;
 }
 
 #weread-ai-panel.collapsed .wap-body {
   display: none;
+}
+
+#weread-ai-panel.collapsed .wap-analyze {
+  display: none;
+}
+
+#weread-ai-panel.collapsed .wap-header {
+  border-bottom: none;
 }
 
 .wap-header {
@@ -39,11 +47,13 @@
   font-weight: 600;
   font-size: 14px;
   color: #333;
+  white-space: nowrap;
 }
 
 .wap-controls {
   display: flex;
   gap: 6px;
+  align-items: center;
 }
 
 .wap-btn {
@@ -67,6 +77,13 @@
 
 .wap-analyze:hover {
   background: #0056b3;
+}
+
+.wap-toggle {
+  width: 26px;
+  min-width: 26px;
+  padding: 4px 0;
+  text-align: center;
 }
 
 .wap-body {
@@ -126,6 +143,18 @@
   gap: 8px;
 }
 
+.wap-highlights .wap-highlight-item {
+  display: block;
+  padding: 8px 0 10px;
+}
+
+.wap-highlight-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .wap-hl-text {
   flex: 1;
   color: #444;
@@ -139,6 +168,20 @@
   white-space: nowrap;
 }
 
+.wap-highlight-comments {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-left: 2px solid #d8e7ff;
+  background: #f8fbff;
+  border-radius: 6px;
+}
+
+.wap-hl-no-comments {
+  margin-top: 6px;
+  color: #aaa;
+  font-size: 11px;
+}
+
 .wap-meta {
   color: #888;
   font-size: 12px;
@@ -147,11 +190,6 @@
 
 .wap-signal-panel {
   margin-bottom: 12px;
-}
-
-.wap-review-block {
-  padding: 8px 0;
-  border-bottom: 1px solid #f5f5f5;
 }
 
 .wap-comments {
@@ -177,19 +215,47 @@
 }
 
 .wap-judgement-card {
-  border-top: 1px solid #f0f0f0;
-  padding-top: 12px;
+  padding: 12px;
+  border: 1px solid #dbe7f5;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.wap-judgement-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.wap-judgement-heading .wap-section-title {
+  margin-bottom: 0;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.wap-scope-badge {
+  flex-shrink: 0;
+  max-width: 140px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: #eef6ff;
+  color: #3c6f9f;
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: right;
 }
 
 .wap-verdict {
   display: inline-block;
-  padding: 4px 8px;
+  padding: 5px 9px;
   margin-bottom: 10px;
   border-radius: 6px;
-  background: #e7f3ff;
-  color: #004085;
+  background: #dff0ff;
+  color: #124c77;
   font-weight: 600;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .wap-judgement-stream {
@@ -209,7 +275,8 @@
 .wap-analysis-section {
   margin-bottom: 12px;
   padding: 10px 12px;
-  background: #f8f9fa;
+  background: #fff;
+  border: 1px solid #eef2f7;
   border-radius: 8px;
 }
 
