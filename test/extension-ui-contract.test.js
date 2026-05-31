@@ -44,6 +44,13 @@ test('same-chapter capture growth does not automatically rerun judgement', () =>
   assert.match(contentJs, /same_chapter_capture_updated/);
 });
 
+test('upload and judgement progress status keeps the chapter title visible', () => {
+  assert.match(contentJs, /function formatChapterProgress\(chapterTitle, message\)/);
+  assert.match(contentJs, /formatChapterProgress\(snapshot\.chapterTitle, '正在发送阅读快照\.\.\.'\)/);
+  assert.match(contentJs, /formatChapterProgress\(snapshot\.chapterTitle, `已发送 \$\{formatCaptureLength\(snapshot\.chapterText\.length, snapshot\)\}，正在生成阅读判断\.\.\.`\)/);
+  assert.match(contentJs, /updateJudgementLoading\(formatChapterProgress\(currentChapterTitle, '正在生成阅读判断\.\.\.'\)\)/);
+});
+
 test('chapter judgement action uses a refresh icon and current-chapter wording', () => {
   assert.match(contentJs, /<span class="wap-refresh-icon" aria-hidden="true">↻<\/span>/);
   assert.match(contentJs, /<span>本章判断<\/span>/);

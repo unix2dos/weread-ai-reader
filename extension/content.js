@@ -156,6 +156,10 @@
     statusEl.textContent = text;
   }
 
+  function formatChapterProgress(chapterTitle, message) {
+    return `${chapterTitle || '当前章节'} · ${message}`;
+  }
+
   function updateSignalPanel(signalPanel) {
     const el = document.querySelector('#weread-ai-panel .wap-signal-panel');
     if (!el) return;
@@ -819,7 +823,7 @@
   }
 
   async function uploadSnapshot(snapshot) {
-    updateStatus('waiting', '正在发送阅读快照...');
+    updateStatus('waiting', formatChapterProgress(snapshot.chapterTitle, '正在发送阅读快照...'));
 
     const response = await chrome.runtime.sendMessage({
       type: 'UPLOAD_READING_SNAPSHOT',
@@ -834,7 +838,7 @@
     currentSnapshotId = body.snapshotId;
     lastSignalPanel = body.signalPanel;
     updateSignalPanel(body.signalPanel);
-    updateStatus('success', `已发送 ${formatCaptureLength(snapshot.chapterText.length, snapshot)}，正在生成阅读判断...`);
+    updateStatus('success', formatChapterProgress(snapshot.chapterTitle, `已发送 ${formatCaptureLength(snapshot.chapterText.length, snapshot)}，正在生成阅读判断...`));
     updateFullRequestDebug(buildFullRequestDebug(snapshot, body));
     updateDebug({
       ...buildClientDebug(snapshot),
@@ -852,12 +856,12 @@
       judgementPort = null;
     }
 
-    updateJudgementLoading('正在生成阅读判断...');
+    updateJudgementLoading(formatChapterProgress(currentChapterTitle, '正在生成阅读判断...'));
     judgementPort = chrome.runtime.connect({ name: 'judgement-stream' });
     judgementPort.onMessage.addListener((message) => {
       if (message.type !== 'sse') return;
       if (message.event === 'start') {
-        updateJudgementLoading('阅读判断流已连接...');
+        updateJudgementLoading(formatChapterProgress(currentChapterTitle, '阅读判断流已连接...'));
       } else if (message.event === 'delta') {
         appendJudgementDelta(message.data.text || '');
       } else if (message.event === 'complete') {
