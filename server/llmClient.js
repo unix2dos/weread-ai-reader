@@ -197,6 +197,7 @@ function buildRepairRequestBody({
           '你是 JSON 修复器，只修复微信读书阅读判断 JSON。',
           '保留原判断含义，不要改写为 Markdown，不要添加解释文字。',
           '必须补齐所有必填字段，尤其是 readerPerspective；如果评论信号不足，readerPerspective 写“暂无足够公开评论信号，暂以正文和划线信号判断”。',
+          'masteryScore 只需要补齐 informationDensity、structuralImportance、skipRisk；overall 会由服务端派生。',
           'questionsForAuthor 只保留问题，不要给答案。',
           '按二八原则修复：nextMustKnow 最多 3 条，reasons 最多 2 条，keyPassages 最多 3 条，questionsForAuthor 最多 2 个。',
           'readingAdvice 必须是一句明确阅读动作，60字内。',
@@ -209,7 +210,6 @@ function buildRepairRequestBody({
           parseError: error.message,
           requiredFields: [
             'recommendation',
-            'masteryScore.overall',
             'masteryScore.informationDensity',
             'masteryScore.structuralImportance',
             'masteryScore.skipRisk',

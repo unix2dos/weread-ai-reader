@@ -70,6 +70,7 @@ test('summary window renders reading judgement, reading signals, and debug separ
   assert.match(summaryJs, /REQUEST_CURRENT_CHAPTER_JUDGEMENT/);
   assert.match(summaryCss, /\.summary-shell/);
   assert.match(summaryCss, /\.summary-score/);
+  assert.match(summaryCss, /\.summary-score-dimensions/);
   assert.match(summaryCss, /\.summary-signals/);
   assert.match(summaryCss, /\.summary-debug-panel/);
 });
@@ -101,6 +102,34 @@ test('summary judgement keeps agent analysis fields together', () => {
   assert.match(primarySummary, /renderTextSection\('读者视角', judgement\.readerPerspective\)/);
   assert.match(primarySummary, /renderList\('理由', judgement\.reasons, 2\)/);
   assert.match(primarySummary, /renderList\('重点段落', judgement\.keyPassages, 3\)/);
+});
+
+test('summary header carries capture context instead of reading signals', () => {
+  const renderContextSource = summaryJs.match(/function renderContext\(state\) \{([\s\S]*?)\n  function renderJudgement/);
+  assert.ok(renderContextSource, 'renderContext source should be inspectable');
+  const renderSignalsSource = summaryJs.match(/function renderReadingSignals\(state\) \{([\s\S]*?)\n  function renderBookReviewPanel/);
+  assert.ok(renderSignalsSource, 'renderReadingSignals source should be inspectable');
+
+  assert.match(renderContextSource[1], /renderCaptureContext\(state\)/);
+  assert.match(summaryJs, /function renderCaptureContext\(state\)/);
+  assert.match(summaryJs, /正文采集/);
+  assert.match(summaryJs, /覆盖约/);
+  assert.match(summaryJs, /labelCaptureMode\(mode\)/);
+  assert.doesNotMatch(renderSignalsSource[1], /renderCaptureMeta/);
+  assert.doesNotMatch(summaryJs, /function renderCaptureMeta/);
+});
+
+test('summary score shows derived overall and dimensions', () => {
+  const renderScoreSource = summaryJs.match(/function renderMasteryScore\(masteryScore\) \{([\s\S]*?)\n  function renderList/);
+  assert.ok(renderScoreSource, 'renderMasteryScore source should be inspectable');
+
+  assert.match(renderScoreSource[1], /renderScoreDimensions\(score\)/);
+  assert.match(summaryJs, /function renderScoreDimensions\(score\)/);
+  assert.match(summaryJs, /信息密度/);
+  assert.match(summaryJs, /结构关键/);
+  assert.match(summaryJs, /跳读风险/);
+  assert.match(summaryCss, /\.summary-score-dimensions/);
+  assert.match(summaryCss, /\.summary-score-dimension/);
 });
 
 test('content script opens the summary window and publishes state updates', () => {

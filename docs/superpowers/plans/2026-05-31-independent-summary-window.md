@@ -74,6 +74,6 @@
 
 - [x] Add tests that assert the summary first screen contains recommendation, mastery score, at most 3 must-know items, at most 2 questions, one reading action, and Agent analysis fields.
 - [x] Keep reader perspective, reasons, and key passages in the reading judgement because they are Agent analysis output.
-- [x] Move WeRead raw signals into a default-open reading-signal frame and keep debug limited to request summary plus complete request.
+- [x] Move capture context into the summary header, move current-chapter WeRead raw signals into a default-open reading-signal frame, split whole-book review background into its own default-collapsed frame, show mastery dimensions, and keep debug limited to request summary plus complete request.
 - [x] Tighten the reading-strategy prompt and parser limits to reduce noisy output before it reaches the UI.
 - [x] Reduce short-judgement output budget from 1200 to 900 tokens.

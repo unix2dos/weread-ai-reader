@@ -2,11 +2,13 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 
 const {
+  MASTERY_SCORE_WEIGHTS,
   PROMPT_VERSION,
   buildCaptureInput,
   buildMessages,
   buildRequestBody,
   buildStrategyInput,
+  calculateMasteryScore,
   parseReadingJudgement,
   toLegacyJudgement
 } = require('../server/readingStrategy');
@@ -83,7 +85,15 @@ test('buildStrategyInput includes mastery score and author-question output requi
     personalSignals: signalPanel.personalSignals
   });
   assert.equal(input.outputShape.recommendation, 'deep_read | quick_read | skip_read');
-  assert.equal(input.outputShape.masteryScore.overall, '0-100 掌握价值分');
+  assert.equal(input.scoreRubric.masteryScoreOverall, '服务端按固定权重从三个维度派生，模型输出的 overall 会被忽略');
+  assert.deepEqual(input.scoreRubric.weights, MASTERY_SCORE_WEIGHTS);
+  assert.deepEqual(input.scoreRubric.thresholds, {
+    mustDeepRead: '90-100 必须精读，本章是全书理解枢纽',
+    deepRead: '80-89 值得精读，但必须说明具体价值来源',
+    quickRead: '65-79 快读为主，只精读局部段落',
+    skipRead: '0-64 可跳读或只扫结论'
+  });
+  assert.equal(input.outputShape.masteryScore.overall, undefined);
   assert.equal(input.outputShape.masteryScore.informationDensity, '0-100 信息密度分');
   assert.equal(input.outputShape.masteryScore.structuralImportance, '0-100 结构关键性分');
   assert.equal(input.outputShape.masteryScore.skipRisk, '0-100 可跳读风险分');
@@ -116,6 +126,10 @@ test('buildMessages includes required system prompt constraints', () => {
   assert.match(systemPrompt, /不要给答案/);
   assert.match(systemPrompt, /不要模拟作者对话/);
   assert.match(systemPrompt, /二八原则/);
+  assert.match(systemPrompt, /掌握价值总分由服务端按固定权重派生/);
+  assert.match(systemPrompt, /90-100/);
+  assert.match(systemPrompt, /80-89/);
+  assert.match(systemPrompt, /65-79/);
   assert.match(systemPrompt, /首屏/);
   assert.match(systemPrompt, /一句明确阅读动作/);
   assert.match(systemPrompt, /必须只输出 JSON/);
@@ -199,15 +213,51 @@ test('parseReadingJudgement normalizes score ranges and arrays', () => {
     readingAdvice: '先精读定义段，再快读例子。'
   })));
 
-  assert.equal(judgement.recommendation, 'deep_read');
+  assert.equal(judgement.recommendation, 'skip_read');
   assert.deepEqual(judgement.masteryScore, {
-    overall: 100,
+    overall: 64,
     informationDensity: 91,
     structuralImportance: 80,
     skipRisk: 0
   });
   assert.deepEqual(judgement.questionsForAuthor, ['作者为什么先定义这个概念？']);
   assert.equal(judgement.readingAdvice, '先精读定义段，再快读例子。');
+});
+
+test('parseReadingJudgement derives overall score from weighted dimensions', () => {
+  assert.equal(calculateMasteryScore({
+    informationDensity: 80,
+    structuralImportance: 90,
+    skipRisk: 70
+  }), 82);
+
+  const judgement = parseReadingJudgement(JSON.stringify(completeReadingJudgement({
+    recommendation: 'quick_read',
+    masteryScore: {
+      overall: 99,
+      informationDensity: 80,
+      structuralImportance: 90,
+      skipRisk: 70
+    }
+  })));
+
+  assert.equal(judgement.masteryScore.overall, 82);
+  assert.equal(judgement.recommendation, 'deep_read');
+});
+
+test('parseReadingJudgement enforces strict recommendation thresholds', () => {
+  const judgement = parseReadingJudgement(JSON.stringify(completeReadingJudgement({
+    recommendation: 'deep_read',
+    masteryScore: {
+      overall: 95,
+      informationDensity: 70,
+      structuralImportance: 70,
+      skipRisk: 80
+    }
+  })));
+
+  assert.equal(judgement.masteryScore.overall, 73);
+  assert.equal(judgement.recommendation, 'quick_read');
 });
 
 test('parseReadingJudgement limits list fields', () => {
@@ -251,12 +301,20 @@ test('parseReadingJudgement rejects invalid model output', () => {
 });
 
 test('parseReadingJudgement accepts legacy conclusion labels as new recommendations', () => {
+  const highScores = {
+    overall: 10,
+    informationDensity: 88,
+    structuralImportance: 90,
+    skipRisk: 82
+  };
   assert.equal(parseReadingJudgement(JSON.stringify(completeReadingJudgement({
-    recommendation: 'worth_deep_read'
+    recommendation: 'worth_deep_read',
+    masteryScore: highScores
   }))).recommendation, 'deep_read');
   assert.equal(parseReadingJudgement(JSON.stringify(completeReadingJudgement({
     recommendation: undefined,
-    conclusion: 'worth_deep_read'
+    conclusion: 'worth_deep_read',
+    masteryScore: highScores
   }))).recommendation, 'deep_read');
 });
 

@@ -6,6 +6,16 @@ const LEGACY_CONCLUSIONS = {
   quick_read: 'quick_read',
   skip_read: 'skip_read'
 };
+const MASTERY_SCORE_WEIGHTS = Object.freeze({
+  informationDensity: 0.35,
+  structuralImportance: 0.4,
+  skipRisk: 0.25
+});
+const SCORE_THRESHOLDS = Object.freeze({
+  mustDeepRead: 90,
+  deepRead: 80,
+  quickRead: 65
+});
 const MAX_OUTPUT_TOKENS = 900;
 const SIGNAL_LIMITS = {
   bestBookmarks: 8,
@@ -45,6 +55,8 @@ function buildMessages({
         '只基于当前章节正文快照、采集覆盖率、当前章节相关的公开信号和个人信号判断；不要扩展到后续章节正文。',
         '优先使用公开阅读信号，其次参考书籍上下文，仅在存在个人信号时使用个人信号。',
         '掌握价值分衡量继续读这一章能获得的概念、结构和风险收益，不是文学质量、文笔好坏或个人喜好评分。',
+        '掌握价值总分由服务端按固定权重派生：信息密度 35%，结构关键性 40%，可跳读风险 25%；你只需要给三个维度分，overall 即使输出也会被忽略。',
+        '严格使用精读门槛：90-100 必须精读，80-89 值得精读，65-79 快读为主，0-64 可跳读或只扫结论。',
         'recommendation 只能是 deep_read、quick_read 或 skip_read。',
         'questionsForAuthor 是给读者带着阅读的追问问题；追问问题只给问题，不要给答案，不要模拟作者对话。',
         '按二八原则输出：首屏只需要结论、掌握价值总分、最多三个掌握点、最多两个追问问题和一句明确阅读动作。',
@@ -83,10 +95,19 @@ function buildStrategyInput({
       chapterText: snapshot.chapterText || ''
     },
     signals,
+    scoreRubric: {
+      masteryScoreOverall: '服务端按固定权重从三个维度派生，模型输出的 overall 会被忽略',
+      weights: MASTERY_SCORE_WEIGHTS,
+      thresholds: {
+        mustDeepRead: '90-100 必须精读，本章是全书理解枢纽',
+        deepRead: '80-89 值得精读，但必须说明具体价值来源',
+        quickRead: '65-79 快读为主，只精读局部段落',
+        skipRead: '0-64 可跳读或只扫结论'
+      }
+    },
     outputShape: {
       recommendation: 'deep_read | quick_read | skip_read',
       masteryScore: {
-        overall: '0-100 掌握价值分',
         informationDensity: '0-100 信息密度分',
         structuralImportance: '0-100 结构关键性分',
         skipRisk: '0-100 可跳读风险分'
@@ -177,10 +198,11 @@ function buildCaptureInput(snapshot, signalPanel) {
 
 function parseReadingJudgement(raw) {
   const parsed = parseJsonObject(raw);
-  const recommendation = parseRecommendation(parsed.recommendation || parsed.conclusion);
+  const requestedRecommendation = parseRecommendation(parsed.recommendation || parsed.conclusion);
+  const masteryScore = normalizeMasteryScore(parsed.masteryScore);
   const judgement = {
-    recommendation,
-    masteryScore: normalizeMasteryScore(parsed.masteryScore),
+    recommendation: normalizeRecommendationForScore(requestedRecommendation, masteryScore.overall),
+    masteryScore,
     nextMustKnow: normalizeStringArray(parsed.nextMustKnow, 3),
     reasons: normalizeStringArray(parsed.reasons, 2),
     keyPassages: normalizeStringArray(parsed.keyPassages, 3),
@@ -245,19 +267,35 @@ function normalizeRecommendation(value) {
   return RECOMMENDATIONS.has(value) ? value : 'quick_read';
 }
 
+function normalizeRecommendationForScore(recommendation, overallScore) {
+  if (overallScore >= SCORE_THRESHOLDS.deepRead) return 'deep_read';
+  if (overallScore >= SCORE_THRESHOLDS.quickRead) return 'quick_read';
+  return 'skip_read';
+}
+
 function normalizeMasteryScore(value) {
   const score = value && typeof value === 'object' ? value : {};
-
-  return {
-    overall: clampScore(score.overall),
+  const dimensionScores = {
     informationDensity: clampScore(score.informationDensity),
     structuralImportance: clampScore(score.structuralImportance),
     skipRisk: clampScore(score.skipRisk)
   };
+
+  return {
+    overall: calculateMasteryScore(dimensionScores),
+    ...dimensionScores
+  };
+}
+
+function calculateMasteryScore(score) {
+  return clampScore(
+    (Number(score.informationDensity) * MASTERY_SCORE_WEIGHTS.informationDensity)
+    + (Number(score.structuralImportance) * MASTERY_SCORE_WEIGHTS.structuralImportance)
+    + (Number(score.skipRisk) * MASTERY_SCORE_WEIGHTS.skipRisk)
+  );
 }
 
 function assertCompleteJudgement(parsed, judgement) {
-  assertScoreField(parsed.masteryScore, 'overall');
   assertScoreField(parsed.masteryScore, 'informationDensity');
   assertScoreField(parsed.masteryScore, 'structuralImportance');
   assertScoreField(parsed.masteryScore, 'skipRisk');
@@ -272,7 +310,7 @@ function assertCompleteJudgement(parsed, judgement) {
 
 function assertScoreField(score, field) {
   if (!score || typeof score !== 'object' || !hasFiniteScore(score[field])) {
-    throw new Error(`Missing reading judgement field: masteryScore${field === 'overall' ? '' : `.${field}`}`);
+    throw new Error(`Missing reading judgement field: masteryScore.${field}`);
   }
 }
 
@@ -360,11 +398,13 @@ function normalizeString(value) {
 }
 
 module.exports = {
+  MASTERY_SCORE_WEIGHTS,
   PROMPT_VERSION,
   buildCaptureInput,
   buildMessages,
   buildRequestBody,
   buildStrategyInput,
+  calculateMasteryScore,
   parseReadingJudgement,
   toLegacyJudgement
 };

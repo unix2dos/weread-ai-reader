@@ -143,7 +143,7 @@ test('runBenchmark measures model latency and parses complete reading judgements
   assert.equal(report.results[0].jsonValid, true);
   assert.equal(report.results[0].schemaComplete, true);
   assert.equal(report.results[0].recommendation, 'deep_read');
-  assert.equal(report.results[0].masteryScoreOverall, 88);
+  assert.equal(report.results[0].masteryScoreOverall, 85);
   assert.equal(report.summary[0].model, 'kimi-k2.6');
   assert.equal(report.summary[0].okCount, 1);
   assert.equal(report.summary[0].sampleCount, 1);

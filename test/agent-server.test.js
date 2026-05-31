@@ -193,7 +193,9 @@ test('returns snapshot id and structured signal panel for a valid reading snapsh
     const requestContent = JSON.parse(body.agentRequest.body.messages[1].content);
     assert.equal(requestContent.promptVersion, 'reading-strategy-v2');
     assert.equal(requestContent.outputShape.recommendation, 'deep_read | quick_read | skip_read');
-    assert.equal(requestContent.outputShape.masteryScore.overall, '0-100 掌握价值分');
+    assert.equal(requestContent.outputShape.masteryScore.overall, undefined);
+    assert.equal(requestContent.scoreRubric.masteryScoreOverall, '服务端按固定权重从三个维度派生，模型输出的 overall 会被忽略');
+    assert.equal(requestContent.scoreRubric.weights.structuralImportance, 0.4);
     assert.equal(requestContent.outputShape.questionsForAuthor[0], '1-2 个带着阅读的问题，只给问题，不要给答案');
     assert.match(body.agentRequest.body.messages[1].content, /这一章讨论了如何判断一章是否值得精读/);
     assert.doesNotMatch(JSON.stringify(body.agentRequest), /test-key|dev-token/);

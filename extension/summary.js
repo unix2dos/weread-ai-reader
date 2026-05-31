@@ -13,6 +13,11 @@
     fullRequest: null,
     updatedAt: ''
   });
+  const SCORE_WEIGHTS = Object.freeze({
+    informationDensity: 0.35,
+    structuralImportance: 0.4,
+    skipRisk: 0.25
+  });
 
   let currentState = { ...DEFAULT_STATE };
   let boundsSaveTimer = null;
@@ -78,8 +83,29 @@
   function renderContext(state) {
     const contextEl = document.querySelector('#summary-context');
     if (!contextEl) return;
-    const parts = [state.bookTitle, state.chapterTitle].filter(Boolean);
+    const parts = [state.bookTitle, state.chapterTitle, renderCaptureContext(state)].filter(Boolean);
     contextEl.textContent = parts.length ? parts.join(' · ') : '等待阅读现场...';
+  }
+
+  function renderCaptureContext(state) {
+    const capture = state.capture || {};
+    const chapter = state.signalPanel?.chapter || {};
+    const textLength = Number(capture.textLength || capture.capturedTextLength || 0);
+    const expectedWordCount = Number(capture.expectedWordCount || chapter.wordCount || 0);
+    const coverage = expectedWordCount && textLength
+      ? `覆盖约 ${Math.min(100, Math.round((textLength / expectedWordCount) * 100))}%`
+      : '';
+    const mode = capture.mode || capture.captureMode || '';
+    const parts = [];
+
+    if (textLength) {
+      parts.push(`正文采集 ${textLength.toLocaleString()} 字${expectedWordCount ? ` / 官方 ${expectedWordCount.toLocaleString()} 字` : ''}`);
+    } else if (expectedWordCount) {
+      parts.push(`官方 ${expectedWordCount.toLocaleString()} 字`);
+    }
+    if (coverage) parts.push(coverage);
+    if (mode) parts.push(labelCaptureMode(mode));
+    return parts.join(' · ');
   }
 
   function renderJudgement(state) {
@@ -143,7 +169,6 @@
       <details class="summary-signals" open>
         <summary>阅读信号</summary>
         <div class="summary-signals-body">
-          ${renderCaptureMeta(state, signalPanel)}
           ${renderWarnings(warnings)}
           ${renderHighlightEvidence(bestBookmarks, bookmarkReviews)}
         </div>
@@ -197,7 +222,7 @@
     const judgement = data?.readingJudgement || data?.judgement || data || {};
     return {
       recommendation: judgement.recommendation || fromLegacyConclusion(judgement.conclusion),
-      masteryScore: judgement.masteryScore || null,
+      masteryScore: normalizeMasteryScore(judgement.masteryScore),
       nextMustKnow: judgement.nextMustKnow || [],
       reasons: judgement.reasons || [],
       keyPassages: judgement.keyPassages || [],
@@ -214,7 +239,7 @@
     if (data?.judgement) return '服务端返回旧格式，只能显示阅读结论；请重启本地服务后重新生成。';
 
     const missing = [];
-    if (!hasNumericScore(judgement.masteryScore?.overall)) missing.push('掌握价值分');
+    if (!normalizeMasteryScore(judgement.masteryScore)) missing.push('掌握价值分');
     if (!judgement.nextMustKnow?.length) missing.push('最需要掌握');
     if (!judgement.questionsForAuthor?.length) missing.push('追问问题');
     if (!judgement.readingAdvice?.trim() && !judgement.readingAction?.trim()) missing.push('阅读建议');
@@ -234,6 +259,27 @@
       <div class="summary-score">
         <span class="summary-score-label">掌握价值</span>
         <strong>${escapeHtml(normalizeDisplayScore(score.overall))}</strong>
+        ${renderScoreDimensions(score)}
+      </div>
+    `;
+  }
+
+  function renderScoreDimensions(score) {
+    const dimensions = [
+      ['信息密度', score.informationDensity],
+      ['结构关键', score.structuralImportance],
+      ['跳读风险', score.skipRisk]
+    ].filter(([, value]) => hasNumericScore(value));
+
+    if (!dimensions.length) return '';
+    return `
+      <div class="summary-score-dimensions">
+        ${dimensions.map(([label, value]) => `
+          <div class="summary-score-dimension">
+            <span>${escapeHtml(label)}</span>
+            <strong>${escapeHtml(normalizeDisplayScore(value))}</strong>
+          </div>
+        `).join('')}
       </div>
     `;
   }
@@ -268,27 +314,6 @@
         <div class="summary-section-title">阅读动作</div>
         <div>${escapeHtml(text)}</div>
       </section>
-    `;
-  }
-
-  function renderCaptureMeta(state, signalPanel) {
-    const capture = state.capture || {};
-    const chapter = signalPanel.chapter || {};
-    const textLength = Number(capture.textLength || capture.capturedTextLength || 0);
-    const expectedWordCount = Number(capture.expectedWordCount || chapter.wordCount || 0);
-    const coverage = expectedWordCount && textLength
-      ? ` · 覆盖约 ${Math.min(100, Math.round((textLength / expectedWordCount) * 100))}%`
-      : '';
-    const mode = capture.mode || capture.captureMode || '';
-    const title = chapter.title || state.chapterTitle || '';
-
-    if (!title && !textLength && !expectedWordCount) return '';
-    return `
-      <div class="summary-meta">
-        ${title ? `章节: ${escapeHtml(title)}<br>` : ''}
-        ${textLength ? `正文采集: ${textLength.toLocaleString()} 字${expectedWordCount ? ` / 官方 ${expectedWordCount.toLocaleString()} 字` : ''}${coverage}<br>` : ''}
-        ${mode ? `采集方式: ${escapeHtml(labelCaptureMode(mode))}` : ''}
-      </div>
     `;
   }
 
@@ -405,6 +430,37 @@
   function hasNumericScore(value) {
     if (value === null || value === undefined || value === '') return false;
     return Number.isFinite(Number(value));
+  }
+
+  function normalizeMasteryScore(value) {
+    if (!value || typeof value !== 'object') return null;
+    const score = {
+      informationDensity: clampScore(value.informationDensity),
+      structuralImportance: clampScore(value.structuralImportance),
+      skipRisk: clampScore(value.skipRisk)
+    };
+    const hasDimensions = ['informationDensity', 'structuralImportance', 'skipRisk']
+      .every((key) => hasNumericScore(value[key]));
+    if (!hasDimensions && !hasNumericScore(value.overall)) return null;
+
+    return {
+      overall: hasDimensions ? calculateMasteryScore(score) : clampScore(value.overall),
+      ...score
+    };
+  }
+
+  function calculateMasteryScore(score) {
+    return clampScore(
+      (score.informationDensity * SCORE_WEIGHTS.informationDensity)
+      + (score.structuralImportance * SCORE_WEIGHTS.structuralImportance)
+      + (score.skipRisk * SCORE_WEIGHTS.skipRisk)
+    );
+  }
+
+  function clampScore(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return 0;
+    return Math.max(0, Math.min(100, Math.round(number)));
   }
 
   function normalizeDisplayScore(value) {

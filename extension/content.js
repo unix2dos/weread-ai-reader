@@ -939,10 +939,23 @@
           underlines: []
         }
       },
+      scoreRubric: {
+        masteryScoreOverall: '服务端按固定权重从三个维度派生，模型输出的 overall 会被忽略',
+        weights: {
+          informationDensity: 0.35,
+          structuralImportance: 0.4,
+          skipRisk: 0.25
+        },
+        thresholds: {
+          mustDeepRead: '90-100 必须精读，本章是全书理解枢纽',
+          deepRead: '80-89 值得精读，但必须说明具体价值来源',
+          quickRead: '65-79 快读为主，只精读局部段落',
+          skipRead: '0-64 可跳读或只扫结论'
+        }
+      },
       outputShape: {
         recommendation: 'deep_read | quick_read | skip_read',
         masteryScore: {
-          overall: '0-100 掌握价值分',
           informationDensity: '0-100 信息密度分',
           structuralImportance: '0-100 结构关键性分',
           skipRisk: '0-100 可跳读风险分'

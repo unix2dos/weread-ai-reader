@@ -6,6 +6,20 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env}"
 EXAMPLE_ENV_FILE="$ROOT_DIR/.env.example"
 MODE="local"
+ENV_SOURCE_FILE=""
+REQUIRED_ENV_NAMES=(WEREAD_API_KEY LLM_API_KEY)
+CONFIG_ENV_NAMES=(
+  WEREAD_API_KEY
+  LLM_API_KEY
+  LLM_API_BASE
+  LLM_MODEL
+  LLM_FALLBACK_MODELS
+  CLIENT_TOKEN
+  ENABLE_PERSONAL_SIGNALS
+  PORT
+  WEREAD_API_BASE
+  WEREAD_SKILL_VERSION
+)
 
 usage() {
   cat <<'USAGE'
@@ -15,7 +29,40 @@ Usage:
 
 Environment:
   ENV_FILE=/path/to/.env              Override the env file path
+                                      Optional in local mode when required
+                                      values are already exported
 USAGE
+}
+
+collect_missing_required_env() {
+  missing=()
+  for name in "${REQUIRED_ENV_NAMES[@]}"; do
+    if [[ -z "${!name:-}" ]]; then
+      missing+=("$name")
+    fi
+  done
+}
+
+save_exported_config_env() {
+  for name in "${CONFIG_ENV_NAMES[@]}"; do
+    if [[ -n "${!name:-}" ]]; then
+      printf -v "START_SERVER_ORIGINAL_${name}" '%s' "${!name}"
+      printf -v "START_SERVER_ORIGINAL_${name}_SET" '%s' "1"
+    fi
+  done
+}
+
+restore_exported_config_env() {
+  local set_name
+  local value_name
+
+  for name in "${CONFIG_ENV_NAMES[@]}"; do
+    set_name="START_SERVER_ORIGINAL_${name}_SET"
+    value_name="START_SERVER_ORIGINAL_${name}"
+    if [[ -n "${!set_name:-}" ]]; then
+      export "$name=${!value_name}"
+    fi
+  done
 }
 
 case "${1:-}" in
@@ -38,22 +85,27 @@ esac
 cd "$ROOT_DIR"
 
 if [[ ! -f "$ENV_FILE" ]]; then
-  cp "$EXAMPLE_ENV_FILE" "$ENV_FILE"
-  echo "Created $ENV_FILE from .env.example. Fill WEREAD_API_KEY and LLM_API_KEY, then run this command again." >&2
-  exit 1
+  collect_missing_required_env
+  if [[ "$MODE" == "docker" ]] || (( ${#missing[@]} > 0 )); then
+    cp "$EXAMPLE_ENV_FILE" "$ENV_FILE"
+    echo "Created $ENV_FILE from .env.example. Fill WEREAD_API_KEY and LLM_API_KEY, then run this command again." >&2
+    exit 1
+  fi
+  ENV_SOURCE_FILE="$EXAMPLE_ENV_FILE"
+else
+  ENV_SOURCE_FILE="$ENV_FILE"
 fi
 
-set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE"
-set +a
+if [[ -n "$ENV_SOURCE_FILE" ]]; then
+  save_exported_config_env
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_SOURCE_FILE"
+  set +a
+  restore_exported_config_env
+fi
 
-missing=()
-for name in WEREAD_API_KEY LLM_API_KEY; do
-  if [[ -z "${!name:-}" ]]; then
-    missing+=("$name")
-  fi
-done
+collect_missing_required_env
 
 if (( ${#missing[@]} > 0 )); then
   printf 'Missing required env values in %s: %s\n' "$ENV_FILE" "${missing[*]}" >&2
