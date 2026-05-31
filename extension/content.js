@@ -419,21 +419,21 @@
           <span class="wap-scope-badge">${escapeHtml(adviceScope)}</span>
         </div>
         <div class="wap-verdict">${escapeHtml(labelRecommendation(judgement.recommendation))}</div>
+        ${renderSchemaWarning(judgement.schemaWarning)}
         ${renderMasteryScore(judgement.masteryScore)}
         ${renderList('最需要掌握', judgement.nextMustKnow)}
         ${renderList('理由', judgement.reasons)}
         ${renderList('重点段落', judgement.keyPassages)}
         ${renderList('追问问题', judgement.questionsForAuthor)}
-        <div class="wap-analysis-section">
-          <div class="wap-analysis-title">读者视角</div>
-          <div class="wap-analysis-content">${escapeHtml(judgement.readerPerspective || '')}</div>
-        </div>
-        <div class="wap-analysis-section">
-          <div class="wap-analysis-title">阅读建议</div>
-          <div class="wap-analysis-content">${escapeHtml(judgement.readingAdvice || '')}</div>
-        </div>
+        ${renderTextSection('读者视角', judgement.readerPerspective)}
+        ${renderTextSection('阅读建议', judgement.readingAdvice)}
       </div>
     `;
+  }
+
+  function renderSchemaWarning(message) {
+    if (!message) return '';
+    return `<div class="wap-warning">${escapeHtml(message)}</div>`;
   }
 
   function renderMasteryScore(masteryScore) {
@@ -475,6 +475,16 @@
         <ul class="wap-comments">
           ${items.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}
         </ul>
+      </div>
+    `;
+  }
+
+  function renderTextSection(title, text) {
+    if (!text || !text.trim()) return '';
+    return `
+      <div class="wap-analysis-section">
+        <div class="wap-analysis-title">${escapeHtml(title)}</div>
+        <div class="wap-analysis-content">${escapeHtml(text)}</div>
       </div>
     `;
   }
@@ -1050,8 +1060,27 @@
       keyPassages: judgement.keyPassages || [],
       questionsForAuthor: judgement.questionsForAuthor || [],
       readerPerspective: judgement.readerPerspective || '',
-      readingAdvice: judgement.readingAdvice || judgement.readingAction || ''
+      readingAdvice: judgement.readingAdvice || judgement.readingAction || '',
+      schemaWarning: buildJudgementSchemaWarning(data, judgement)
     };
+  }
+
+  function buildJudgementSchemaWarning(data, judgement) {
+    if (!data?.readingJudgement) {
+      return data?.judgement
+        ? '服务端返回旧格式，只能显示阅读结论；请重启本地服务后重新生成。'
+        : '未收到结构化阅读判断；请重新生成本章判断。';
+    }
+
+    const missing = [];
+    if (!hasNumericScore(judgement.masteryScore?.overall)) missing.push('掌握价值分');
+    if (!judgement.nextMustKnow?.length) missing.push('最需要掌握');
+    if (!judgement.reasons?.length) missing.push('理由');
+    if (!judgement.keyPassages?.length) missing.push('重点段落');
+    if (!judgement.questionsForAuthor?.length) missing.push('追问问题');
+    if (!judgement.readerPerspective?.trim()) missing.push('读者视角');
+    if (!judgement.readingAdvice?.trim()) missing.push('阅读建议');
+    return missing.length ? `模型返回缺少结构化字段：${missing.join('、')}；请重新生成本章判断。` : '';
   }
 
   function fromLegacyConclusion(value) {

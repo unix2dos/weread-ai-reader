@@ -45,6 +45,25 @@ function createSignalPanel(overrides = {}) {
   };
 }
 
+function completeReadingJudgement(overrides = {}) {
+  return {
+    recommendation: 'quick_read',
+    masteryScore: {
+      overall: 58,
+      informationDensity: 45,
+      structuralImportance: 50,
+      skipRisk: 70
+    },
+    nextMustKnow: ['理解本章的过渡作用'],
+    reasons: ['当前可见正文更像承接段。'],
+    keyPassages: ['当前可见正文'],
+    questionsForAuthor: ['这一章为什么放在这里？'],
+    readerPerspective: '公开评论不足，暂以正文和划线信号判断。',
+    readingAdvice: '快读结构句，遇到概念定义再放慢。',
+    ...overrides
+  };
+}
+
 test('buildStrategyInput includes mastery score and author-question output requirements', () => {
   const signalPanel = createSignalPanel();
   const input = buildStrategyInput({
@@ -115,7 +134,7 @@ test('buildRequestBody asks for JSON-only mastery judgement', () => {
 });
 
 test('parseReadingJudgement normalizes score ranges and arrays', () => {
-  const judgement = parseReadingJudgement(JSON.stringify({
+  const judgement = parseReadingJudgement(JSON.stringify(completeReadingJudgement({
     recommendation: 'deep_read',
     masteryScore: {
       overall: 120,
@@ -129,7 +148,7 @@ test('parseReadingJudgement normalizes score ranges and arrays', () => {
     questionsForAuthor: ['作者为什么先定义这个概念？'],
     readerPerspective: '读者认为这里是基础。',
     readingAdvice: '先精读定义段，再快读例子。'
-  }));
+  })));
 
   assert.equal(judgement.recommendation, 'deep_read');
   assert.deepEqual(judgement.masteryScore, {
@@ -143,13 +162,13 @@ test('parseReadingJudgement normalizes score ranges and arrays', () => {
 });
 
 test('parseReadingJudgement limits list fields', () => {
-  const judgement = parseReadingJudgement(JSON.stringify({
+  const judgement = parseReadingJudgement(JSON.stringify(completeReadingJudgement({
     recommendation: 'quick_read',
     nextMustKnow: ['一', '二', '三', '四', '五'],
     reasons: ['一', '二', '三', '四'],
     keyPassages: ['一', '二', '三', '四', '五', '六'],
     questionsForAuthor: ['一', '二', '三', '四', '五', '六']
-  }));
+  })));
 
   assert.deepEqual(judgement.nextMustKnow, ['一', '二', '三', '四']);
   assert.deepEqual(judgement.reasons, ['一', '二', '三']);
@@ -174,15 +193,22 @@ test('parseReadingJudgement rejects invalid model output', () => {
   assert.throws(() => parseReadingJudgement(JSON.stringify({
     recommendation: 'maybe_read'
   })), /Invalid reading judgement recommendation/);
+  assert.throws(() => parseReadingJudgement(JSON.stringify({
+    recommendation: 'quick_read'
+  })), /Missing reading judgement field: masteryScore/);
+  assert.throws(() => parseReadingJudgement(JSON.stringify(completeReadingJudgement({
+    nextMustKnow: []
+  }))), /Missing reading judgement field: nextMustKnow/);
 });
 
 test('parseReadingJudgement accepts legacy conclusion labels as new recommendations', () => {
-  assert.equal(parseReadingJudgement(JSON.stringify({
+  assert.equal(parseReadingJudgement(JSON.stringify(completeReadingJudgement({
     recommendation: 'worth_deep_read'
-  })).recommendation, 'deep_read');
-  assert.equal(parseReadingJudgement(JSON.stringify({
+  }))).recommendation, 'deep_read');
+  assert.equal(parseReadingJudgement(JSON.stringify(completeReadingJudgement({
+    recommendation: undefined,
     conclusion: 'worth_deep_read'
-  })).recommendation, 'deep_read');
+  }))).recommendation, 'deep_read');
 });
 
 test('toLegacyJudgement maps new recommendation to existing conclusion labels', () => {

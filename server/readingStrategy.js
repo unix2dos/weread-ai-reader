@@ -34,6 +34,7 @@ function buildMessages({
         '掌握价值分衡量继续读这一章能获得的概念、结构和风险收益，不是文学质量、文笔好坏或个人喜好评分。',
         'recommendation 只能是 deep_read、quick_read 或 skip_read。',
         'questionsForAuthor 是给读者带着阅读的追问问题；追问问题只给问题，不要给答案，不要模拟作者对话。',
+        '所有 JSON 字段都必须有实际内容；没有评论信号时 readerPerspective 要说明“暂无足够公开评论信号”，不能留空。',
         '必须只输出 JSON，不要输出 Markdown、解释文字或代码块。',
         'JSON 字段必须包含 recommendation, masteryScore, nextMustKnow, reasons, keyPassages, questionsForAuthor, readerPerspective, readingAdvice。'
       ].join('\n')
@@ -89,9 +90,9 @@ function buildStrategyInput({
       },
       nextMustKnow: ['1-4 条接下来最需要掌握的概念、区分或结构'],
       reasons: ['2-3 条只基于当前章节与信号的判断依据'],
-      keyPassages: ['3-5 条热门划线或已采集正文片段'],
+      keyPassages: ['1-5 条热门划线或已采集正文片段；公开划线不足时使用当前可见正文片段'],
       questionsForAuthor: ['带着阅读的问题，不要给答案'],
-      readerPerspective: '评论中的共识、争议、误读或补充',
+      readerPerspective: '评论中的共识、争议、误读或补充；没有评论信号时说明暂无足够公开评论信号',
       readingAdvice: '接下来精读、快读或跳读的具体方式'
     }
   };
@@ -130,8 +131,7 @@ function buildCaptureInput(snapshot, signalPanel) {
 function parseReadingJudgement(raw) {
   const parsed = parseJsonObject(raw);
   const recommendation = parseRecommendation(parsed.recommendation || parsed.conclusion);
-
-  return {
+  const judgement = {
     recommendation,
     masteryScore: normalizeMasteryScore(parsed.masteryScore),
     nextMustKnow: normalizeStringArray(parsed.nextMustKnow, 4),
@@ -141,6 +141,9 @@ function parseReadingJudgement(raw) {
     readerPerspective: normalizeString(parsed.readerPerspective),
     readingAdvice: normalizeString(parsed.readingAdvice)
   };
+
+  assertCompleteJudgement(parsed, judgement);
+  return judgement;
 }
 
 function toLegacyJudgement(judgement) {
@@ -204,6 +207,43 @@ function normalizeMasteryScore(value) {
     structuralImportance: clampScore(score.structuralImportance),
     skipRisk: clampScore(score.skipRisk)
   };
+}
+
+function assertCompleteJudgement(parsed, judgement) {
+  assertScoreField(parsed.masteryScore, 'overall');
+  assertScoreField(parsed.masteryScore, 'informationDensity');
+  assertScoreField(parsed.masteryScore, 'structuralImportance');
+  assertScoreField(parsed.masteryScore, 'skipRisk');
+
+  assertNonEmptyArray(judgement.nextMustKnow, 'nextMustKnow');
+  assertNonEmptyArray(judgement.reasons, 'reasons');
+  assertNonEmptyArray(judgement.keyPassages, 'keyPassages');
+  assertNonEmptyArray(judgement.questionsForAuthor, 'questionsForAuthor');
+  assertNonEmptyString(judgement.readerPerspective, 'readerPerspective');
+  assertNonEmptyString(judgement.readingAdvice, 'readingAdvice');
+}
+
+function assertScoreField(score, field) {
+  if (!score || typeof score !== 'object' || !hasFiniteScore(score[field])) {
+    throw new Error(`Missing reading judgement field: masteryScore${field === 'overall' ? '' : `.${field}`}`);
+  }
+}
+
+function assertNonEmptyArray(value, field) {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`Missing reading judgement field: ${field}`);
+  }
+}
+
+function assertNonEmptyString(value, field) {
+  if (!value || !value.trim()) {
+    throw new Error(`Missing reading judgement field: ${field}`);
+  }
+}
+
+function hasFiniteScore(value) {
+  if (value === null || value === undefined || value === '') return false;
+  return Number.isFinite(Number(value));
 }
 
 function clampScore(value) {

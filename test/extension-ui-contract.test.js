@@ -40,6 +40,19 @@ test('reading judgement renders questions for author without answer wording', ()
   assert.doesNotMatch(contentJs, /<div class="wap-analysis-title">(?:作者回答|模拟作者|答案)<\/div>/);
 });
 
+test('reading judgement does not render empty text sections', () => {
+  assert.match(contentJs, /function renderTextSection\(title, text\)/);
+  assert.match(contentJs, /renderTextSection\('读者视角', judgement\.readerPerspective\)/);
+  assert.match(contentJs, /renderTextSection\('阅读建议', judgement\.readingAdvice\)/);
+  assert.doesNotMatch(contentJs, /<div class="wap-analysis-title">读者视角<\/div>\s*<div class="wap-analysis-content">\$\{escapeHtml\(judgement\.readerPerspective \|\| ''\)\}<\/div>/);
+});
+
+test('legacy judgement fallback is visibly marked as incomplete', () => {
+  assert.match(contentJs, /schemaWarning:/);
+  assert.match(contentJs, /服务端返回旧格式，只能显示阅读结论/);
+  assert.match(contentJs, /renderSchemaWarning\(judgement\.schemaWarning\)/);
+});
+
 test('debug fallback no longer rebuilds a divergent prompt', () => {
   assert.doesNotMatch(contentJs, /function buildAgentRequestFallback/);
   assert.doesNotMatch(contentJs, /server-generated-url-unavailable/);
