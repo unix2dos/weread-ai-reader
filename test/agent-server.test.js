@@ -287,6 +287,80 @@ test('llmClient rejects invalid streamed JSON without yielding a validated advic
   assert.deepEqual(events, []);
 });
 
+test('llmClient retries once to repair schema-incomplete judgement JSON', async () => {
+  const firstModelContent = JSON.stringify({
+    recommendation: 'deep_read',
+    masteryScore: {
+      overall: 88,
+      informationDensity: 82,
+      structuralImportance: 90,
+      skipRisk: 75
+    },
+    nextMustKnow: ['核心概念如何支撑后文'],
+    reasons: ['热门划线集中在核心定义。'],
+    keyPassages: ['核心概念'],
+    questionsForAuthor: ['作者为什么先定义这个概念？'],
+    readingAdvice: '先精读定义段。'
+  });
+  const repairedModelContent = JSON.stringify({
+    recommendation: 'deep_read',
+    masteryScore: {
+      overall: 88,
+      informationDensity: 82,
+      structuralImportance: 90,
+      skipRisk: 75
+    },
+    nextMustKnow: ['核心概念如何支撑后文'],
+    reasons: ['热门划线集中在核心定义。'],
+    keyPassages: ['核心概念'],
+    questionsForAuthor: ['作者为什么先定义这个概念？'],
+    readerPerspective: '读者认为这里是基础。',
+    readingAdvice: '先精读定义段。'
+  });
+  const fetchCalls = [];
+  const client = createLlmClient({
+    apiKey: 'test-key',
+    apiBase: 'https://llm.example/v1',
+    model: 'mimo-v2.5',
+    fetchImpl: async (url, options) => {
+      fetchCalls.push({ url, body: JSON.parse(options.body) });
+      return {
+        ok: true,
+        body: createOpenAiSseBody(fetchCalls.length === 1
+          ? [firstModelContent]
+          : [repairedModelContent])
+      };
+    }
+  });
+
+  const events = [];
+  for await (const event of client.streamShortJudgement({
+    snapshot: createSnapshot(),
+    signalPanel: {
+      chapter: { chapterUid: 101, wordCount: 3200 },
+      bestBookmarks: [],
+      bookmarkReviews: [],
+      bookReviews: [],
+      debug: { resolvedBookId: 'book-1' }
+    },
+    promptVersion: 'reading-strategy-v2'
+  })) {
+    events.push(event);
+  }
+
+  assert.equal(fetchCalls.length, 2);
+  assert.match(fetchCalls[1].body.messages[0].content, /修复/);
+  assert.match(fetchCalls[1].body.messages[1].content, /Missing reading judgement field: readerPerspective/);
+  assert.equal(events.length, 2);
+  assert.deepEqual(events[0], {
+    type: 'delta',
+    field: 'readingAdvice',
+    text: '先精读定义段。'
+  });
+  assert.equal(events[1].type, 'complete');
+  assert.equal(events[1].readingJudgement.readerPerspective, '读者认为这里是基础。');
+});
+
 test('includes passive capture metadata in the Agent request', async () => {
   const app = createApp({
     config: { clientToken: 'dev-token' },
