@@ -283,6 +283,196 @@ test('omits bookmark review like count when the skill response has no like field
     assert.deepEqual(body.signalPanel.bookmarkReviews[0].comments, [
       { content: '接口没有返回点赞字段。' }
     ]);
+    assert.deepEqual(body.signalPanel.debug.bookmarkReviewDetails, {
+      candidateCount: 0,
+      requestCount: 0,
+      directCount: 0,
+      enrichedCount: 0,
+      fetchLimit: 20
+    });
+  });
+});
+
+test('uses bookmark review wrapper likes without fetching review details', async () => {
+  const calls = [];
+  const app = createApp({
+    config: { clientToken: 'dev-token' },
+    wereadClient: {
+      async call(apiName, params) {
+        calls.push({ apiName, params });
+        if (apiName === '/book/chapterinfo') {
+          return { chapters: [{ chapterUid: 101, title: '第一章', wordCount: 3200, chapterIdx: 1 }] };
+        }
+        if (apiName === '/book/info') return {};
+        if (apiName === '/book/getprogress') return {};
+        if (apiName === '/book/bestbookmarks') {
+          return {
+            items: [
+              { range: '1-20', markText: '值得精读的关键段落', totalCount: 12, chapterUid: 101 }
+            ]
+          };
+        }
+        if (apiName === '/book/readreviews') {
+          return {
+            reviews: [
+              {
+                range: '1-20',
+                totalCount: 3,
+                pageReviews: [
+                  { reviewId: 'r-1', likesCount: 2, review: { content: '外层低赞。' } },
+                  { reviewId: 'r-2', likesCount: 9, review: { content: '外层高赞。' } },
+                  { reviewId: 'r-3', likesCount: 4, review: { content: '外层中赞。' } },
+                  { reviewId: 'r-4', review: { content: '外层缺赞。' } }
+                ]
+              }
+            ]
+          };
+        }
+        if (apiName === '/review/single') {
+          throw new Error('review details should not be fetched when wrapper likes are present');
+        }
+        if (apiName === '/review/list') return { reviews: [] };
+        throw new Error(`Unexpected API: ${apiName}`);
+      }
+    },
+    llmClient: createLlmClient({
+      apiKey: 'test-key',
+      apiBase: 'https://llm.example/v1',
+      model: 'deepseek-v4-flash',
+      fetchImpl: async () => {
+        throw new Error('fetch should not be called while storing a snapshot');
+      }
+    }),
+    logger: { info() {}, warn() {}, error() {} }
+  });
+
+  await withServer(app, async (baseUrl) => {
+    const resp = await fetch(`${baseUrl}/api/reading-snapshots`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(createSnapshot())
+    });
+
+    assert.equal(resp.status, 200);
+    const body = await resp.json();
+
+    assert.equal(calls.some((call) => call.apiName === '/review/single'), false);
+    assert.deepEqual(body.signalPanel.bookmarkReviews[0].comments, [
+      { content: '外层高赞。', likeCount: 9 },
+      { content: '外层中赞。', likeCount: 4 },
+      { content: '外层低赞。', likeCount: 2 }
+    ]);
+    assert.deepEqual(body.signalPanel.debug.bookmarkReviewDetails, {
+      candidateCount: 1,
+      requestCount: 0,
+      directCount: 3,
+      enrichedCount: 0,
+      fetchLimit: 20
+    });
+    assert.deepEqual(body.signalPanel.debug.warnings, []);
+  });
+});
+
+test('enriches bookmark review likes from review details with a bounded request budget', async () => {
+  const calls = [];
+  const createPageReviews = (prefix, count) => Array.from({ length: count }, (_, index) => ({
+    reviewId: `${prefix}-${index + 1}`,
+    review: { content: `${prefix}评论${index + 1}` }
+  }));
+  const app = createApp({
+    config: { clientToken: 'dev-token' },
+    wereadClient: {
+      async call(apiName, params) {
+        calls.push({ apiName, params });
+        if (apiName === '/book/chapterinfo') {
+          return { chapters: [{ chapterUid: 101, title: '第一章', wordCount: 3200, chapterIdx: 1 }] };
+        }
+        if (apiName === '/book/info') return {};
+        if (apiName === '/book/getprogress') return {};
+        if (apiName === '/book/bestbookmarks') {
+          return {
+            items: [
+              { range: '1-20', markText: '第一条热门划线', totalCount: 30, chapterUid: 101 },
+              { range: '21-40', markText: '第二条热门划线', totalCount: 20, chapterUid: 101 }
+            ]
+          };
+        }
+        if (apiName === '/book/readreviews') {
+          return {
+            reviews: [
+              { range: '1-20', totalCount: 15, pageReviews: createPageReviews('a', 15) },
+              { range: '21-40', totalCount: 15, pageReviews: createPageReviews('b', 15) }
+            ]
+          };
+        }
+        if (apiName === '/review/single') {
+          const [, numberText] = params.reviewId.split('-');
+          const base = params.reviewId.startsWith('b-') ? 100 : 0;
+          return {
+            reviewId: params.reviewId,
+            review: {
+              review: {
+                likeCount: base + Number(numberText)
+              }
+            }
+          };
+        }
+        if (apiName === '/review/list') return { reviews: [] };
+        throw new Error(`Unexpected API: ${apiName}`);
+      }
+    },
+    llmClient: createLlmClient({
+      apiKey: 'test-key',
+      apiBase: 'https://llm.example/v1',
+      model: 'deepseek-v4-flash',
+      fetchImpl: async () => {
+        throw new Error('fetch should not be called while storing a snapshot');
+      }
+    }),
+    logger: { info() {}, warn() {}, error() {} }
+  });
+
+  await withServer(app, async (baseUrl) => {
+    const resp = await fetch(`${baseUrl}/api/reading-snapshots`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(createSnapshot())
+    });
+
+    assert.equal(resp.status, 200);
+    const body = await resp.json();
+    const detailCalls = calls.filter((call) => call.apiName === '/review/single');
+
+    assert.equal(detailCalls.length, 20);
+    assert.deepEqual(detailCalls[0].params, {
+      reviewId: 'a-1',
+      commentsCount: 0,
+      likesCount: 1,
+      likesDirection: 0
+    });
+    assert.deepEqual(detailCalls.at(-1).params, {
+      reviewId: 'b-10',
+      commentsCount: 0,
+      likesCount: 1,
+      likesDirection: 0
+    });
+    assert.deepEqual(body.signalPanel.bookmarkReviews[0].comments, [
+      { content: 'a评论10', likeCount: 10 },
+      { content: 'a评论9', likeCount: 9 },
+      { content: 'a评论8', likeCount: 8 }
+    ]);
+    assert.deepEqual(body.signalPanel.bookmarkReviews[1].comments, [
+      { content: 'b评论10', likeCount: 110 },
+      { content: 'b评论9', likeCount: 109 },
+      { content: 'b评论8', likeCount: 108 }
+    ]);
+    assert.deepEqual(body.signalPanel.debug.bookmarkReviewDetails, {
+      candidateCount: 30,
+      requestCount: 20,
+      directCount: 0,
+      enrichedCount: 20,
+      fetchLimit: 20
+    });
   });
 });
 

@@ -31,6 +31,8 @@ Environment:
   ENV_FILE=/path/to/.env              Override the env file path
                                       Optional in local mode when required
                                       values are already exported
+  START_SERVER_KILL_OLD=0             Do not stop an old local Agent server
+                                      process before starting
 USAGE
 }
 
@@ -63,6 +65,68 @@ restore_exported_config_env() {
       export "$name=${!value_name}"
     fi
   done
+}
+
+stop_old_local_server() {
+  local port="$1"
+  local pid
+
+  if [[ "${START_SERVER_KILL_OLD:-1}" == "0" ]]; then
+    return
+  fi
+
+  if ! command -v lsof >/dev/null 2>&1; then
+    echo "lsof is unavailable; skipping old server cleanup for port $port." >&2
+    return
+  fi
+
+  for pid in $(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true); do
+    if should_stop_old_server_pid "$pid"; then
+      stop_pid "$pid" "$port"
+    else
+      echo "Port $port is used by process $pid, but it does not look like this Agent server. Not killing it." >&2
+    fi
+  done
+}
+
+should_stop_old_server_pid() {
+  local pid="$1"
+  local command_line
+  local cwd
+
+  command_line="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1 || true)"
+
+  if [[ "$command_line" == *"$ROOT_DIR/server/index.js"* ]]; then
+    return 0
+  fi
+
+  if [[ "$cwd" == "$ROOT_DIR" || "$cwd" == "$ROOT_DIR/"* ]]; then
+    [[ "$command_line" == *"server/index.js"* ]]
+    return
+  fi
+
+  return 1
+}
+
+stop_pid() {
+  local pid="$1"
+  local port="$2"
+  local kill_cmd="${START_SERVER_KILL_CMD:-kill}"
+  local attempt
+
+  echo "Stopping old Agent server process $pid on port $port." >&2
+  "$kill_cmd" "$pid" 2>/dev/null || return 0
+
+  for attempt in 1 2 3 4 5; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      return
+    fi
+    sleep 0.2
+  done
+
+  echo "Old Agent server process $pid did not stop after SIGTERM; sending SIGKILL." >&2
+  "$kill_cmd" -9 "$pid" 2>/dev/null || true
 }
 
 case "${1:-}" in
@@ -151,5 +215,7 @@ fi
 if [[ ! -d "$ROOT_DIR/node_modules/express" ]]; then
   npm install
 fi
+
+stop_old_local_server "${PORT:-19763}"
 
 exec npm start

@@ -43,7 +43,7 @@
 | **Agent 输入日志** | 调试用日志，用于确认采集端发给 Agent 服务器的阅读快照、服务器补齐的 Skill 信号和最终发送给 LLM 的输入；默认记录结构、长度、哈希和截断预览，不长期保存整章正文 |
 | **单用户 Agent 服务器** | V1 的服务端形态，只服务一个用户，但请求协议保留 `clientToken`，为未来多用户托管预留身份边界 |
 | **clientToken** | Chrome 扩展访问 Agent 服务器的开发用令牌；V1 映射到默认用户，未来可扩展为多用户身份与密钥隔离入口 |
-| **阅读快照** | 采集端上传给 Agent 服务器的一次当前阅读现场，包含书籍、章节、URL、章节正文快照、内容哈希、采集时间和请求 ID |
+| **阅读快照** | 采集端上传给 Agent 服务器的一次当前阅读现场，包含书籍与章节标识、URL、章节正文快照、内容哈希、采集时间和请求 ID；它不是 WeRead 公共阅读信号本身，只是定位和生成判断的输入 |
 | **snapshotId** | Agent 服务器接收阅读快照后返回的标识，用于查询信号面板、打开短判断 SSE 流和复用缓存 |
 
 ## 信号优先级
@@ -134,7 +134,7 @@ Chrome 扩展先 `POST /api/reading-snapshots` 上传阅读快照，Agent 服务
     "bestBookmarks": [{ "range": "1-20", "markText": "string", "totalCount": 12 }],
     "bookmarkReviews": [{ "range": "1-20", "totalCount": 3, "comments": [{ "content": "string", "likeCount": 2 }] }],
     "debug": {
-      "skillCalls": ["/book/chapterinfo", "/book/info", "/book/getprogress", "/book/bestbookmarks", "/book/readreviews", "/review/list"],
+      "skillCalls": ["/book/chapterinfo", "/book/info", "/book/getprogress", "/book/bestbookmarks", "/book/readreviews", "/review/list", "/review/single"],
       "warnings": []
     }
   }
@@ -142,6 +142,7 @@ Chrome 扩展先 `POST /api/reading-snapshots` 上传阅读快照，Agent 服务
 ```
 
 `likeCount` 只在 WeRead Skill 回包明确提供点赞数字段时出现；不能把缺失字段归一化成 `0`。
+当 `/book/readreviews` 只返回评论内容和 `reviewId` 时，Agent 最多对 20 条评论追加调用 `/review/single` 补点赞数，再按点赞数展示每条划线下的 top3 评论。
 
 Agent 服务器不返回 HTML；UI 展示由 Chrome 扩展负责。
 
@@ -251,6 +252,7 @@ observer.observe(document.documentElement, { childList: true, subtree: true });
 | 划线热度 | `/book/underlines` | ❌ (只有人数) |
 | 个人想法 | `/review/list/mine` | ✅ |
 | 划线评论 | `/book/readreviews` | ✅ |
+| 评论点赞详情 | `/review/single` | ✅ |
 | 书籍点评 | `/review/list` | ✅ |
 
 ### 参考项目

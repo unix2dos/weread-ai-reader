@@ -1,6 +1,8 @@
 # WeRead AI Reader
 
-微信读书网页版的章节级 AI 跟读工具。Chrome 扩展负责被动采集当前阅读现场，本地 Agent 服务器负责调用官方 WeRead Skill 与 OpenAI 兼容 LLM，独立摘要窗口展示本章阅读判断。
+> 不只是 AI 摘要，而是辅助思考阅读：帮你看见重点、提出追问、判断章节速读和精读。
+
+微信读书网页版的章节级 AI 跟读工具。Chrome 扩展负责被动采集当前阅读现场，本地 Agent 服务器负责调用官方 WeRead Skill 与 OpenAI 兼容 LLM，独立摘要窗口展示本章阅读判断、阅读信号和整本书评价背景。
 
 ## 功能
 
@@ -18,21 +20,33 @@
 
 <img src="docs/images/options-page.png" alt="扩展设置页" width="900">
 
-## 架构
+## 架构与数据流
 
 ```mermaid
-flowchart TD
-  A["微信读书网页版"] --> B["Chrome 扩展采集阅读快照"]
-  B --> C["本地 Agent 服务器"]
-  C --> D["官方 WeRead Skill"]
-  C --> E["OpenAI 兼容 LLM"]
-  D --> F["章节信号与书籍上下文"]
-  E --> G["结构化阅读判断"]
-  F --> H["独立摘要窗口"]
-  G --> H
+sequenceDiagram
+  participant Page as "微信读书网页版"
+  participant Extension as "Chrome 扩展"
+  participant Agent as "本地 Agent 服务器"
+  participant Skill as "官方 WeRead Skill"
+  participant LLM as "OpenAI 兼容 LLM"
+  participant Summary as "独立摘要窗口"
+
+  Page->>Extension: 采集阅读现场
+  Extension->>Agent: POST 阅读快照
+  Agent->>Skill: 用书籍和章节标识查询公共信号
+  Skill-->>Agent: 返回 signalPanel
+  Agent-->>Extension: 返回 snapshotId 和 signalPanel
+  Extension->>Summary: 展示阅读信号和书评背景
+  Extension->>Agent: 请求阅读判断 SSE
+  Agent->>LLM: 发送正文快照和 signalPanel
+  LLM-->>Agent: 返回阅读判断 JSON
+  Agent-->>Extension: 流式返回阅读判断
+  Extension->>Summary: 展示阅读判断
 ```
 
-官方 WeRead Skill 不提供当前章节正文。扩展只采集浏览器已渲染的正文快照；覆盖率不足时，Agent 会基于已采集正文和公共阅读信号给出阶段性判断。
+阅读快照不是 WeRead 公共数据本身，而是扩展上传的一次“当前阅读现场”：包括 `bookId`、`bookTitle`、`chapterUid`、`chapterTitle`、URL、已渲染正文片段、内容哈希和采集时间。Agent 服务器用快照里的书籍和章节标识去调用官方 WeRead Skill，查询章节目录、书籍信息、热门划线、划线评论和公开书评，整理成 `signalPanel`；如果 `chapterUid` 缺失，Agent 会尽量用 `bookId + chapterTitle` 从章节目录里补齐。
+
+官方 WeRead Skill 不提供当前章节正文。扩展只负责提供浏览器已渲染的正文快照；随后阅读判断由 LLM 基于“正文快照 + `signalPanel`”生成。独立摘要窗口同时展示阅读判断、阅读信号和整本书评价背景。
 
 ## 运行要求
 

@@ -1,5 +1,7 @@
 const BOOKMARK_REVIEW_COMMENT_FETCH_COUNT = 20;
 const BOOKMARK_REVIEW_COMMENT_DISPLAY_COUNT = 3;
+const BOOKMARK_REVIEW_DETAIL_FETCH_LIMIT = 20;
+const BOOKMARK_REVIEW_DETAIL_LIKES_COUNT = 1;
 
 async function buildSignalPanel(wereadClient, snapshot, options = {}) {
   const logger = options.logger || console;
@@ -92,7 +94,13 @@ async function buildSignalPanel(wereadClient, snapshot, options = {}) {
   });
 
   const bookReviews = normalizeBookReviews(bookReviewsResp.reviews || []);
-  const bookmarkReviews = normalizeBookmarkReviews(bookmarkReviewsResp.reviews || []);
+  const bookmarkReviewDetails = await buildBookmarkReviewDetails(
+    wereadClient,
+    skillCalls,
+    warnings,
+    bookmarkReviewsResp.reviews || []
+  );
+  const bookmarkReviews = normalizeBookmarkReviews(bookmarkReviewsResp.reviews || [], bookmarkReviewDetails.likeCounts);
   const personalSignals = enablePersonalSignals
     ? await buildPersonalSignals(wereadClient, skillCalls, warnings, {
       bookId: skillBookId,
@@ -130,6 +138,7 @@ async function buildSignalPanel(wereadClient, snapshot, options = {}) {
       rawBookId: snapshot.bookId,
       resolvedBookId: skillBookId,
       resolution,
+      bookmarkReviewDetails: bookmarkReviewDetails.debug,
       warnings
     }
   };
@@ -186,6 +195,113 @@ async function buildPersonalSignals(wereadClient, skillCalls, warnings, context)
 async function callSkill(wereadClient, skillCalls, apiName, params) {
   skillCalls.push(apiName);
   return wereadClient.call(apiName, params);
+}
+
+async function buildBookmarkReviewDetails(wereadClient, skillCalls, warnings, reviews) {
+  const candidates = collectBookmarkReviewDetailCandidates(reviews, BOOKMARK_REVIEW_DETAIL_FETCH_LIMIT);
+  const directCount = countBookmarkReviewDirectLikeCounts(reviews);
+  const likeCounts = new Map();
+  let requestCount = 0;
+
+  if (directCount > 0) {
+    return {
+      likeCounts,
+      debug: {
+        candidateCount: countBookmarkReviewDetailCandidates(reviews),
+        requestCount,
+        directCount,
+        enrichedCount: 0,
+        fetchLimit: BOOKMARK_REVIEW_DETAIL_FETCH_LIMIT
+      }
+    };
+  }
+
+  for (const candidate of candidates) {
+    requestCount += 1;
+    const detail = await callSkill(wereadClient, skillCalls, '/review/single', {
+      reviewId: candidate.reviewId,
+      commentsCount: 0,
+      likesCount: BOOKMARK_REVIEW_DETAIL_LIKES_COUNT,
+      likesDirection: 0
+    }).catch((err) => {
+      warnings.push(`划线评论点赞详情获取失败(${candidate.reviewId}): ${err.message}`);
+      return null;
+    });
+    const likeCount = extractReviewDetailLikeCount(detail);
+    if (likeCount !== undefined) likeCounts.set(candidate.reviewId, likeCount);
+  }
+
+  if (directCount === 0 && requestCount > 0 && likeCounts.size === 0) {
+    warnings.push('划线评论点赞详情未返回可识别的点赞数字段。');
+  }
+
+  return {
+    likeCounts,
+    debug: {
+      candidateCount: countBookmarkReviewDetailCandidates(reviews),
+      requestCount,
+      directCount,
+      enrichedCount: likeCounts.size,
+      fetchLimit: BOOKMARK_REVIEW_DETAIL_FETCH_LIMIT
+    }
+  };
+}
+
+function collectBookmarkReviewDetailCandidates(reviews, limit) {
+  const queues = (reviews || []).map((item) => (item.pageReviews || [])
+    .map((pageReview) => {
+      const source = extractPageReviewSource(pageReview);
+      const reviewId = extractPageReviewId(pageReview, source);
+      if (!reviewId) return null;
+      if (extractPageReviewLikeCount(pageReview, source) !== undefined) return null;
+      return { reviewId };
+    })
+    .filter(Boolean));
+  const selected = [];
+  const seen = new Set();
+
+  while (selected.length < limit) {
+    let picked = false;
+    for (const queue of queues) {
+      let candidate = queue.shift();
+      while (candidate && seen.has(candidate.reviewId)) {
+        candidate = queue.shift();
+      }
+      if (!candidate) continue;
+      seen.add(candidate.reviewId);
+      selected.push(candidate);
+      picked = true;
+      if (selected.length >= limit) break;
+    }
+    if (!picked) break;
+  }
+
+  return selected;
+}
+
+function countBookmarkReviewDetailCandidates(reviews) {
+  const seen = new Set();
+  for (const item of reviews || []) {
+    for (const pageReview of item.pageReviews || []) {
+      const source = extractPageReviewSource(pageReview);
+      const reviewId = extractPageReviewId(pageReview, source);
+      if (!reviewId) continue;
+      if (extractPageReviewLikeCount(pageReview, source) !== undefined) continue;
+      seen.add(reviewId);
+    }
+  }
+  return seen.size;
+}
+
+function countBookmarkReviewDirectLikeCounts(reviews) {
+  let count = 0;
+  for (const item of reviews || []) {
+    for (const pageReview of item.pageReviews || []) {
+      const source = extractPageReviewSource(pageReview);
+      if (extractPageReviewLikeCount(pageReview, source) !== undefined) count += 1;
+    }
+  }
+  return count;
 }
 
 async function resolveBookIdByTitle(wereadClient, skillCalls, bookTitle) {
@@ -271,24 +387,25 @@ function normalizeBestBookmarks(items, chapterUid) {
     .filter((item) => item.range && item.markText);
 }
 
-function normalizeBookmarkReviews(reviews) {
+function normalizeBookmarkReviews(reviews, detailLikeCounts = new Map()) {
   return reviews.map((item) => ({
     range: String(item.range || ''),
     totalCount: Number(item.totalCount || 0),
-    comments: normalizeBookmarkReviewComments(item.pageReviews || [])
+    comments: normalizeBookmarkReviewComments(item.pageReviews || [], detailLikeCounts)
   })).filter((item) => item.range);
 }
 
-function normalizeBookmarkReviewComments(pageReviews) {
+function normalizeBookmarkReviewComments(pageReviews, detailLikeCounts) {
   return pageReviews
     .map((pageReview, index) => {
-      const review = pageReview && (pageReview.review && (pageReview.review.review || pageReview.review));
-      const source = review || pageReview || {};
+      const source = extractPageReviewSource(pageReview);
       const comment = {
         content: String(source.content || ''),
         index
       };
-      const likeCount = optionalNumberFromFields(source, ['likeCount', 'likesCount']);
+      const reviewId = extractPageReviewId(pageReview, source);
+      const likeCount = extractPageReviewLikeCount(pageReview, source)
+        ?? lookupLikeCount(detailLikeCounts, reviewId);
       if (likeCount !== undefined) comment.likeCount = likeCount;
       return comment;
     })
@@ -357,6 +474,27 @@ function numberOrNull(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function extractPageReviewSource(pageReview) {
+  if (!pageReview || typeof pageReview !== 'object') return {};
+  if (!pageReview.review || typeof pageReview.review !== 'object') return pageReview;
+  return pageReview.review.review || pageReview.review;
+}
+
+function extractPageReviewId(pageReview, source) {
+  if (!pageReview || typeof pageReview !== 'object') return null;
+  return stringValueOrNull(
+    source && source.reviewId,
+    pageReview.reviewId,
+    pageReview.review && pageReview.review.reviewId,
+    pageReview.review && pageReview.review.review && pageReview.review.review.reviewId
+  );
+}
+
+function extractPageReviewLikeCount(pageReview, source) {
+  return optionalNumberFromFields(source, ['likeCount', 'likesCount'])
+    ?? optionalNumberFromFields(pageReview, ['likeCount', 'likesCount']);
+}
+
 function optionalNumberFromFields(source, fields) {
   if (!source || typeof source !== 'object') return undefined;
   for (const field of fields) {
@@ -367,6 +505,47 @@ function optionalNumberFromFields(source, fields) {
     if (Number.isFinite(number) && number >= 0) return number;
   }
   return undefined;
+}
+
+function extractReviewDetailLikeCount(resp) {
+  if (!resp || typeof resp !== 'object') return undefined;
+  const sources = [
+    resp,
+    resp.review,
+    resp.review && resp.review.review,
+    resp.data,
+    resp.data && resp.data.review,
+    resp.data && resp.data.review && resp.data.review.review
+  ].filter((source) => source && typeof source === 'object');
+
+  for (const source of sources) {
+    const likeCount = optionalNumberFromFields(source, ['likeCount', 'likesCount', 'likeCnt', 'likesCnt']);
+    if (likeCount !== undefined) return likeCount;
+  }
+
+  for (const source of sources) {
+    for (const key of ['likes', 'likeInfo', 'likesInfo']) {
+      const likeInfo = source[key];
+      const likeCount = optionalNumberFromFields(likeInfo, ['totalCount', 'count', 'total']);
+      if (likeCount !== undefined) return likeCount;
+    }
+  }
+
+  return undefined;
+}
+
+function lookupLikeCount(detailLikeCounts, reviewId) {
+  if (!reviewId || !detailLikeCounts || typeof detailLikeCounts.get !== 'function') return undefined;
+  return detailLikeCounts.get(reviewId);
+}
+
+function stringValueOrNull(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    const text = String(value).trim();
+    if (text) return text;
+  }
+  return null;
 }
 
 function withOptionalLikeCount(item, source) {
