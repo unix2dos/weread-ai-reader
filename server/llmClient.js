@@ -2,8 +2,10 @@ const DEFAULT_LLM_API_BASE = 'https://api.openai.com/v1';
 const DEFAULT_LLM_MODEL = 'gpt-4.1-nano';
 
 const {
+  buildEvidenceWarning,
   buildRequestBody,
   parseReadingJudgement,
+  toCompatibleReadingJudgement,
   toLegacyJudgement
 } = require('./readingStrategy');
 
@@ -47,13 +49,16 @@ function createLlmClient({
             requestBody,
             raw
           });
+          const evidenceWarning = buildEvidenceWarning({ snapshot, signalPanel });
+          if (evidenceWarning) readingJudgement.evidenceWarning = evidenceWarning;
+          const compatibleReadingJudgement = toCompatibleReadingJudgement(readingJudgement);
           if (readingJudgement.readingAdvice) {
             yield { type: 'delta', field: 'readingAdvice', text: readingJudgement.readingAdvice };
           }
           yield {
             type: 'complete',
-            readingJudgement,
-            judgement: toLegacyJudgement(readingJudgement)
+            readingJudgement: compatibleReadingJudgement,
+            judgement: toLegacyJudgement(compatibleReadingJudgement)
           };
           return;
         } catch (err) {
@@ -197,9 +202,9 @@ function buildRepairRequestBody({
           '你是 JSON 修复器，只修复微信读书阅读判断 JSON。',
           '保留原判断含义，不要改写为 Markdown，不要添加解释文字。',
           '必须补齐所有必填字段，尤其是 readerPerspective；如果评论信号不足，readerPerspective 写“暂无足够公开评论信号，暂以正文和划线信号判断”。',
-          'masteryScore 只需要补齐 contentGain、structuralImportance、deepReadNecessity；overall 会由服务端派生。',
-          'questionsForAuthor 只保留问题，不要给答案。',
-          '按二八原则修复：nextMustKnow 最多 3 条，reasons 最多 2 条，keyPassages 最多 3 条，questionsForAuthor 最多 2 个。',
+          'masteryScore 只需要补齐 takeawayValue、understandingLeverage、attentionROI；overall 会由服务端派生。',
+          'questionsForAuthor 只保留带着读的问题，不要给答案。',
+          '按二八原则修复：nextMustKnow 最多 3 条，reasons 最多 2 条，evidenceSnippets 最多 3 条，questionsForAuthor 最多 2 个。',
           'readingAdvice 必须是一句明确阅读动作，60字内。',
           '必须只输出完整 JSON 对象。'
         ].join('\n')
@@ -210,12 +215,12 @@ function buildRepairRequestBody({
           parseError: error.message,
           requiredFields: [
             'recommendation',
-            'masteryScore.contentGain',
-            'masteryScore.structuralImportance',
-            'masteryScore.deepReadNecessity',
+            'masteryScore.takeawayValue',
+            'masteryScore.understandingLeverage',
+            'masteryScore.attentionROI',
             'nextMustKnow',
             'reasons',
-            'keyPassages',
+            'evidenceSnippets',
             'questionsForAuthor',
             'readerPerspective',
             'readingAdvice'

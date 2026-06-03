@@ -46,14 +46,14 @@ function createJudgement(overrides = {}) {
     recommendation: 'deep_read',
     masteryScore: {
       overall: 88,
-      contentGain: 84,
-      structuralImportance: 90,
-      deepReadNecessity: 78
+      takeawayValue: 84,
+      understandingLeverage: 90,
+      attentionROI: 78
     },
     nextMustKnow: ['方向选择背后的资源约束', '短期机会和长期能力的区别', '结构差异如何影响个人选择'],
     reasons: ['热门划线集中在方向定义。', '评论认为这一段解释了分化原因。'],
-    keyPassages: ['方向不是口号，而是资源、能力和风险的组合。'],
-    questionsForAuthor: ['作者如何区分真正的方向和短期机会？', '资源约束会怎样改变个人选择？', '为什么同样努力会走向不同结果？'],
+    evidenceSnippets: ['方向不是口号，而是资源、能力和风险的组合。'],
+    questionsForAuthor: ['作者如何区分真正的方向和短期机会？', '资源约束会怎样改变个人选择？'],
     readerPerspective: '读者普遍认为本章解释了选择差异的结构性原因。',
     readingAdvice: '先精读方向定义，再快读案例部分，最后回看资源约束的判断框架。',
     ...overrides

@@ -120,8 +120,8 @@ test('summary window renders reading judgement, reading signals, and debug separ
   assert.match(summaryJs, /chrome\.runtime\.sendMessage\(\{ type: 'GET_SUMMARY_STATE' \}/);
   assert.match(summaryJs, /SUMMARY_STATE_UPDATED/);
   assert.match(summaryJs, /function renderJudgement\(state\)/);
-  assert.match(summaryJs, /最需要掌握/);
-  assert.match(summaryJs, /追问问题/);
+  assert.match(summaryJs, /能带走的收获/);
+  assert.match(summaryJs, /带着读的问题/);
   assert.match(summaryJs, /<details class="summary-signals" open>/);
   assert.match(summaryJs, /<summary>阅读信号<\/summary>/);
   assert.match(summaryJs, /<details class="summary-debug-panel">/);
@@ -217,17 +217,18 @@ test('popup actions highlight opening the summary window', () => {
   assert.doesNotMatch(popupHtml, /btn-muted/);
 });
 
-test('summary judgement keeps agent analysis fields together', () => {
+test('summary judgement keeps high-signal fields in the first screen and folds evidence', () => {
   const renderJudgementSource = summaryJs.match(/function renderJudgement\(state\) \{([\s\S]*?)\n  function renderEvidence/);
   assert.ok(renderJudgementSource, 'renderJudgement source should be inspectable');
   const primarySummary = renderJudgementSource[1];
 
-  assert.match(primarySummary, /renderList\('最需要掌握', judgement\.nextMustKnow, 3\)/);
-  assert.match(primarySummary, /renderList\('追问问题', judgement\.questionsForAuthor, 2\)/);
+  assert.match(primarySummary, /renderList\('能带走的收获', judgement\.nextMustKnow, 3\)/);
+  assert.match(primarySummary, /renderList\('带着读的问题', judgement\.questionsForAuthor, 2\)/);
   assert.match(primarySummary, /renderSummaryAction\(judgement\.readingAdvice\)/);
-  assert.match(primarySummary, /renderTextSection\('读者视角', judgement\.readerPerspective\)/);
-  assert.match(primarySummary, /renderList\('理由', judgement\.reasons, 2\)/);
-  assert.match(primarySummary, /renderList\('重点段落', judgement\.keyPassages, 3\)/);
+  assert.match(primarySummary, /renderEvidenceDetails\(judgement\)/);
+  assert.doesNotMatch(primarySummary, /renderTextSection\('读者视角', judgement\.readerPerspective\)/);
+  assert.doesNotMatch(primarySummary, /renderList\('理由', judgement\.reasons, 2\)/);
+  assert.doesNotMatch(primarySummary, /renderList\('证据片段', judgement\.evidenceSnippets, 3\)/);
 });
 
 test('summary header carries capture context instead of reading signals', () => {
@@ -251,9 +252,11 @@ test('summary score shows derived overall and dimensions', () => {
 
   assert.match(renderScoreSource[1], /renderScoreDimensions\(score\)/);
   assert.match(summaryJs, /function renderScoreDimensions\(score\)/);
-  assert.match(summaryJs, /内容增量/);
-  assert.match(summaryJs, /结构关键/);
-  assert.match(summaryJs, /精读必要/);
+  assert.match(summaryJs, /可带走收获/);
+  assert.match(summaryJs, /理解杠杆/);
+  assert.match(summaryJs, /投入回报/);
+  assert.doesNotMatch(summaryJs, /内容增量/);
+  assert.doesNotMatch(summaryJs, /精读必要/);
   assert.doesNotMatch(summaryJs, /跳读风险/);
   assert.match(summaryJs, /must_deep_read/);
   assert.match(summaryJs, /必须精读/);
@@ -279,8 +282,8 @@ test('content complete event keeps structured judgement payload intact', () => {
   assert.match(contentJs, /const judgement = data\?\.readingJudgement \|\| data\?\.judgement \|\| data \|\| \{\};/);
 });
 
-test('summary judgement renders questions for author without answer wording', () => {
-  assert.match(summaryJs, /renderList\('追问问题', judgement\.questionsForAuthor/);
+test('summary judgement renders reading questions without answer wording', () => {
+  assert.match(summaryJs, /renderList\('带着读的问题', judgement\.questionsForAuthor/);
   assert.doesNotMatch(contentJs, /<div class="wap-analysis-title">(?:作者回答|模拟作者|答案)<\/div>/);
   assert.doesNotMatch(summaryJs, /<div class="summary-section-title">(?:作者回答|模拟作者|答案)<\/div>/);
 });
@@ -303,6 +306,10 @@ test('reading signals and book reviews are separate foldable frames', () => {
   assert.match(summaryJs, /<details class="summary-signals" open>/);
   assert.match(summaryJs, /<summary>阅读信号<\/summary>/);
   assert.match(summaryJs, /renderHighlightEvidence\(bestBookmarks, bookmarkReviews\)/);
+  assert.match(summaryJs, /bestBookmarks\.slice\(0, 3\)/);
+  assert.match(summaryJs, /renderMoreHighlightEvidence\(bestBookmarks, bookmarkReviews\)/);
+  assert.match(summaryJs, /summary-highlight-card/);
+  assert.match(summaryJs, /summary-highlight-comment/);
   assert.doesNotMatch(signalsSource, /renderBookReviews\(bookReviews\)/);
   assert.match(summaryJs, /<details class="summary-book-review-panel">/);
   assert.doesNotMatch(summaryJs, /<details class="summary-book-review-panel" open>/);
@@ -327,7 +334,7 @@ test('debug panel contains only request summary and complete request', () => {
   assert.doesNotMatch(debugSource, /renderWarnings/);
   assert.doesNotMatch(debugSource, /renderTextSection\('读者视角'/);
   assert.doesNotMatch(debugSource, /renderList\('理由'/);
-  assert.doesNotMatch(debugSource, /renderList\('重点段落'/);
+  assert.doesNotMatch(debugSource, /renderList\('证据片段'/);
   assert.doesNotMatch(debugSource, /renderHighlightEvidence/);
   assert.doesNotMatch(debugSource, /renderBookReviews/);
 });
@@ -345,7 +352,7 @@ test('debug fallback no longer rebuilds a divergent prompt', () => {
 
 test('debug request summary uses reading strategy prompt version', () => {
   assert.doesNotMatch(contentJs, /short-judgement-v1/);
-  assert.match(contentJs, /reading-strategy-v2/);
+  assert.match(contentJs, /reading-strategy-v3/);
 });
 
 test('debug unavailable agent request omits stale agent body location', () => {

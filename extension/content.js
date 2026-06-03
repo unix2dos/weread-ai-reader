@@ -696,7 +696,7 @@
       masteryScore: judgement.masteryScore || null,
       nextMustKnow: judgement.nextMustKnow || [],
       reasons: judgement.reasons || [],
-      keyPassages: judgement.keyPassages || [],
+      evidenceSnippets: judgement.evidenceSnippets || judgement.keyPassages || [],
       questionsForAuthor: judgement.questionsForAuthor || [],
       readerPerspective: judgement.readerPerspective || '',
       readingAdvice: judgement.readingAdvice || judgement.readingAction || '',
@@ -712,11 +712,11 @@
     }
 
     const missing = [];
-    if (!hasNumericScore(judgement.masteryScore?.overall)) missing.push('掌握价值分');
-    if (!judgement.nextMustKnow?.length) missing.push('最需要掌握');
+    if (!hasNumericScore(judgement.masteryScore?.overall)) missing.push('收获价值分');
+    if (!judgement.nextMustKnow?.length) missing.push('能带走的收获');
     if (!judgement.reasons?.length) missing.push('理由');
-    if (!judgement.keyPassages?.length) missing.push('重点段落');
-    if (!judgement.questionsForAuthor?.length) missing.push('追问问题');
+    if (!(judgement.evidenceSnippets || judgement.keyPassages)?.length) missing.push('证据片段');
+    if (!judgement.questionsForAuthor?.length) missing.push('带着读的问题');
     if (!judgement.readerPerspective?.trim()) missing.push('读者视角');
     if (!judgement.readingAdvice?.trim()) missing.push('阅读建议');
     return missing.length ? `模型返回缺少结构化字段：${missing.join('、')}；请重新生成本章判断。` : '';
@@ -814,7 +814,7 @@
   function buildFullRequestDebug(snapshot, uploadResponse) {
     const signalPanel = uploadResponse.signalPanel || {};
     const resolvedBookId = signalPanel.debug?.resolvedBookId || snapshot.bookId;
-    const promptVersion = 'reading-strategy-v2';
+    const promptVersion = 'reading-strategy-v3';
     const hasServerAgentRequest = Boolean(uploadResponse.agentRequest);
     const agentInput = buildAgentInputDebug(snapshot, signalPanel, promptVersion, resolvedBookId);
 
@@ -913,7 +913,7 @@
   function buildAgentInputDebug(snapshot, signalPanel, promptVersion, resolvedBookId) {
     return {
       promptVersion,
-      task: '判断当前章节接下来最需要掌握什么，并给出精读、快读或跳读建议。',
+      task: '判断当前章节读完能带走什么可靠收获，并给出精读、快读或跳读建议。',
       chapter: {
         bookId: resolvedBookId,
         rawBookId: snapshot.bookId,
@@ -940,11 +940,11 @@
         }
       },
       scoreRubric: {
-        masteryScoreOverall: '服务端按固定权重从三个维度派生，模型输出的 overall 会被忽略',
+        masteryScoreOverall: '服务端按固定权重从三个收获价值子分派生，模型输出的 overall 会被忽略',
         weights: {
-          contentGain: 0.35,
-          structuralImportance: 0.4,
-          deepReadNecessity: 0.25
+          takeawayValue: 0.45,
+          understandingLeverage: 0.35,
+          attentionROI: 0.2
         },
         thresholds: {
           mustDeepRead: '90-100 必须精读，本章是全书理解枢纽',
@@ -956,14 +956,14 @@
       outputShape: {
         recommendation: 'must_deep_read | deep_read | quick_read | skip_read',
         masteryScore: {
-          contentGain: '0-100 内容增量分',
-          structuralImportance: '0-100 结构关键性分',
-          deepReadNecessity: '0-100 精读必要性分'
+          takeawayValue: '0-100 可带走收获分',
+          understandingLeverage: '0-100 理解杠杆分',
+          attentionROI: '0-100 投入回报分'
         },
-        nextMustKnow: ['1-3 条接下来最需要掌握的概念、区分或结构'],
+        nextMustKnow: ['1-3 条读完本章能带走的概念、方法、判断框架、关键事实或可迁移理解'],
         reasons: ['1-2 条只基于当前章节与信号的判断依据'],
-        keyPassages: ['1-3 条热门划线或已采集正文片段'],
-        questionsForAuthor: ['1-2 个带着阅读的问题，只给问题，不要给答案'],
+        evidenceSnippets: ['1-3 条可追溯证据片段'],
+        questionsForAuthor: ['1-2 个带着读的问题，只给问题，不要给答案'],
         readerPerspective: '评论中的共识、争议、误读或补充',
         readingAdvice: '一句明确阅读动作，60字内，直接说明精读、快读或跳读怎么做'
       }

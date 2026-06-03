@@ -14,9 +14,9 @@
     updatedAt: ''
   });
   const SCORE_WEIGHTS = Object.freeze({
-    contentGain: 0.35,
-    structuralImportance: 0.4,
-    deepReadNecessity: 0.25
+    takeawayValue: 0.45,
+    understandingLeverage: 0.35,
+    attentionROI: 0.2
   });
 
   let currentState = { ...DEFAULT_STATE };
@@ -151,12 +151,11 @@
           ${renderMasteryScore(judgement.masteryScore)}
         </div>
         ${renderSchemaWarning(judgement.schemaWarning)}
-        ${renderList('最需要掌握', judgement.nextMustKnow, 3)}
-        ${renderList('追问问题', judgement.questionsForAuthor, 2)}
+        ${renderEvidenceWarning(judgement.evidenceWarning)}
+        ${renderList('能带走的收获', judgement.nextMustKnow, 3)}
+        ${renderList('带着读的问题', judgement.questionsForAuthor, 2)}
         ${renderSummaryAction(judgement.readingAdvice)}
-        ${renderTextSection('读者视角', judgement.readerPerspective)}
-        ${renderList('理由', judgement.reasons, 2)}
-        ${renderList('重点段落', judgement.keyPassages, 3)}
+        ${renderEvidenceDetails(judgement)}
       </div>
     `;
   }
@@ -238,10 +237,11 @@
       masteryScore: normalizeMasteryScore(judgement.masteryScore),
       nextMustKnow: judgement.nextMustKnow || [],
       reasons: judgement.reasons || [],
-      keyPassages: judgement.keyPassages || [],
+      evidenceSnippets: judgement.evidenceSnippets || judgement.keyPassages || [],
       questionsForAuthor: judgement.questionsForAuthor || [],
       readerPerspective: judgement.readerPerspective || '',
       readingAdvice: judgement.readingAdvice || judgement.readingAction || '',
+      evidenceWarning: judgement.evidenceWarning || '',
       schemaWarning: judgement.schemaWarning || buildJudgementSchemaWarning(data, judgement)
     };
   }
@@ -252,9 +252,9 @@
     if (data?.judgement) return '服务端返回旧格式，只能显示阅读结论；请重启本地服务后重新生成。';
 
     const missing = [];
-    if (!normalizeMasteryScore(judgement.masteryScore)) missing.push('掌握价值分');
-    if (!judgement.nextMustKnow?.length) missing.push('最需要掌握');
-    if (!judgement.questionsForAuthor?.length) missing.push('追问问题');
+    if (!normalizeMasteryScore(judgement.masteryScore)) missing.push('收获价值分');
+    if (!judgement.nextMustKnow?.length) missing.push('能带走的收获');
+    if (!judgement.questionsForAuthor?.length) missing.push('带着读的问题');
     if (!judgement.readingAdvice?.trim() && !judgement.readingAction?.trim()) missing.push('阅读建议');
     return missing.length ? `模型返回缺少结构化字段：${missing.join('、')}；请重新生成本章判断。` : '';
   }
@@ -264,13 +264,18 @@
     return `<div class="summary-warning">${escapeHtml(message)}</div>`;
   }
 
+  function renderEvidenceWarning(message) {
+    if (!message || !message.trim()) return '';
+    return `<div class="summary-warning">${escapeHtml(message)}</div>`;
+  }
+
   function renderMasteryScore(masteryScore) {
     const score = masteryScore || {};
     if (!hasNumericScore(score.overall)) return '';
 
     return `
       <div class="summary-score">
-        <span class="summary-score-label">掌握价值</span>
+        <span class="summary-score-label">收获价值</span>
         <strong>${escapeHtml(normalizeDisplayScore(score.overall))}</strong>
         ${renderScoreDimensions(score)}
       </div>
@@ -279,9 +284,9 @@
 
   function renderScoreDimensions(score) {
     const dimensions = [
-      ['内容增量', score.contentGain],
-      ['结构关键', score.structuralImportance],
-      ['精读必要', score.deepReadNecessity]
+      ['可带走收获', score.takeawayValue],
+      ['理解杠杆', score.understandingLeverage],
+      ['投入回报', score.attentionROI]
     ].filter(([, value]) => hasNumericScore(value));
 
     if (!dimensions.length) return '';
@@ -330,27 +335,61 @@
     `;
   }
 
+  function renderEvidenceDetails(judgement) {
+    const content = [
+      renderTextSection('读者视角', judgement.readerPerspective),
+      renderList('理由', judgement.reasons, 2),
+      renderList('证据片段', judgement.evidenceSnippets, 3)
+    ].filter(Boolean).join('');
+    if (!content) return '';
+
+    return `
+      <details class="summary-evidence-details">
+        <summary>判断依据</summary>
+        <div class="summary-evidence-details-body">
+          ${content}
+        </div>
+      </details>
+    `;
+  }
+
   function renderHighlightEvidence(bestBookmarks, bookmarkReviews) {
     if (!bestBookmarks.length) return '<div class="summary-hint">暂无本章热门划线</div>';
     const reviewsByRange = buildReviewsByRange(bookmarkReviews);
     return `
       <section class="summary-section">
         <div class="summary-section-title">热门划线</div>
-        <ul class="summary-list summary-highlights">
-          ${bestBookmarks.slice(0, 5).map((item) => {
-            const review = reviewsByRange.get(item.range);
-            return `
-              <li>
-                <div class="summary-highlight-row">
-                  <span>${escapeHtml(item.markText)}</span>
-                  <small>${Number(item.totalCount || 0)}人</small>
-                </div>
-                ${renderHighlightComments(review)}
-              </li>
-            `;
-          }).join('')}
-        </ul>
+        <div class="summary-highlight-list">
+          ${bestBookmarks.slice(0, 3).map((item) => renderHighlightCard(item, reviewsByRange.get(item.range), 1)).join('')}
+        </div>
+        ${renderMoreHighlightEvidence(bestBookmarks, bookmarkReviews)}
       </section>
+    `;
+  }
+
+  function renderMoreHighlightEvidence(bestBookmarks, bookmarkReviews) {
+    const reviewsByRange = buildReviewsByRange(bookmarkReviews);
+    const hasHiddenBookmarks = bestBookmarks.length > 3;
+    const hasHiddenComments = (bookmarkReviews || []).some((review) => (review.comments || []).length > 1);
+    if (!hasHiddenBookmarks && !hasHiddenComments) return '';
+
+    return `
+      <details class="summary-more-signals">
+        <summary>展开更多阅读信号</summary>
+        <div class="summary-more-signals-body">
+          ${bestBookmarks.slice(0, 5).map((item) => renderHighlightCard(item, reviewsByRange.get(item.range), 3)).join('')}
+        </div>
+      </details>
+    `;
+  }
+
+  function renderHighlightCard(item, review, commentLimit) {
+    return `
+      <article class="summary-highlight-card">
+        <div class="summary-highlight-text">${escapeHtml(item.markText)}</div>
+        <div class="summary-highlight-meta">${Number(item.totalCount || 0)}人划线</div>
+        ${renderHighlightComments(review, commentLimit)}
+      </article>
     `;
   }
 
@@ -360,12 +399,12 @@
       .map((item) => [item.range, item]));
   }
 
-  function renderHighlightComments(review) {
+  function renderHighlightComments(review, limit = 3) {
     if (!review?.comments?.length) return '';
     return `
-      <ul class="summary-sublist">
-        ${review.comments.slice(0, 3).map(renderHighlightComment).join('')}
-      </ul>
+      <div class="summary-highlight-comments">
+        ${review.comments.slice(0, limit).map(renderHighlightComment).join('')}
+      </div>
     `;
   }
 
@@ -375,7 +414,7 @@
     const likeText = hasCommentLikeCount(comment)
       ? `<span class="summary-comment-like">${likeCount}赞</span>`
       : '';
-    return `<li><span class="summary-comment-text">${escapeHtml(content)}</span>${likeText}</li>`;
+    return `<div class="summary-highlight-comment"><span class="summary-comment-text">${escapeHtml(content)}</span>${likeText}</div>`;
   }
 
   function getCommentContent(comment) {
@@ -448,13 +487,13 @@
   function normalizeMasteryScore(value) {
     if (!value || typeof value !== 'object') return null;
     const score = {
-      contentGain: clampScore(readScoreDimension(value, 'contentGain', 'informationDensity')),
-      structuralImportance: clampScore(value.structuralImportance),
-      deepReadNecessity: clampScore(readScoreDimension(value, 'deepReadNecessity', 'skipRisk'))
+      takeawayValue: clampScore(readScoreDimension(value, 'takeawayValue', 'contentGain', 'informationDensity')),
+      understandingLeverage: clampScore(readScoreDimension(value, 'understandingLeverage', 'structuralImportance')),
+      attentionROI: clampScore(readScoreDimension(value, 'attentionROI', 'deepReadNecessity', 'skipRisk'))
     };
-    const hasDimensions = hasNumericScore(readScoreDimension(value, 'contentGain', 'informationDensity'))
-      && hasNumericScore(value.structuralImportance)
-      && hasNumericScore(readScoreDimension(value, 'deepReadNecessity', 'skipRisk'));
+    const hasDimensions = hasNumericScore(readScoreDimension(value, 'takeawayValue', 'contentGain', 'informationDensity'))
+      && hasNumericScore(readScoreDimension(value, 'understandingLeverage', 'structuralImportance'))
+      && hasNumericScore(readScoreDimension(value, 'attentionROI', 'deepReadNecessity', 'skipRisk'));
     if (!hasDimensions && !hasNumericScore(value.overall)) return null;
 
     return {
@@ -465,16 +504,19 @@
 
   function calculateMasteryScore(score) {
     return clampScore(
-      (score.contentGain * SCORE_WEIGHTS.contentGain)
-      + (score.structuralImportance * SCORE_WEIGHTS.structuralImportance)
-      + (score.deepReadNecessity * SCORE_WEIGHTS.deepReadNecessity)
+      (score.takeawayValue * SCORE_WEIGHTS.takeawayValue)
+      + (score.understandingLeverage * SCORE_WEIGHTS.understandingLeverage)
+      + (score.attentionROI * SCORE_WEIGHTS.attentionROI)
     );
   }
 
-  function readScoreDimension(score, field, legacyField) {
+  function readScoreDimension(score, field, ...legacyFields) {
     if (!score || typeof score !== 'object') return undefined;
     if (hasNumericScore(score[field])) return score[field];
-    return legacyField ? score[legacyField] : undefined;
+    for (const legacyField of legacyFields) {
+      if (hasNumericScore(score[legacyField])) return score[legacyField];
+    }
+    return undefined;
   }
 
   function clampScore(value) {

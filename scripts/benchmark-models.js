@@ -266,8 +266,8 @@ function scoreReadingJudgement(judgement) {
     hasCompleteScores: hasCompleteScores(judgement.masteryScore),
     nextMustKnowActionable: hasActionableItems(judgement.nextMustKnow, { min: 1, max: 4 }),
     reasonsEvidenceBased: hasActionableItems(judgement.reasons, { min: 2, max: 3 }),
-    keyPassagesPresent: hasActionableItems(judgement.keyPassages, { min: 1, max: 5 }),
-    questionsAreQuestions: questions.length >= 3 && questions.length <= 5 && questions.every(looksLikeQuestion),
+    evidenceSnippetsPresent: hasActionableItems(judgement.evidenceSnippets || judgement.keyPassages, { min: 1, max: 5 }),
+    questionsAreQuestions: questions.length >= 1 && questions.length <= 2 && questions.every(looksLikeQuestion),
     questionsAvoidAnswers: questions.length > 0 && questions.every(avoidsAnswerLeak),
     readerPerspectivePresent: hasMeaningfulText(judgement.readerPerspective),
     readingAdviceActionable: hasActionableAdvice(judgement.readingAdvice)
@@ -278,7 +278,7 @@ function scoreReadingJudgement(judgement) {
     hasCompleteScores: 12,
     nextMustKnowActionable: 18,
     reasonsEvidenceBased: 12,
-    keyPassagesPresent: 8,
+    evidenceSnippetsPresent: 8,
     questionsAreQuestions: 14,
     questionsAvoidAnswers: 12,
     readerPerspectivePresent: 6,
@@ -429,15 +429,15 @@ function parseJson(raw) {
 
 function hasCompleteScores(score) {
   return Number.isFinite(Number(score && score.overall))
-    && hasScoreDimension(score, 'contentGain', 'informationDensity')
-    && hasScoreDimension(score, 'structuralImportance')
-    && hasScoreDimension(score, 'deepReadNecessity', 'skipRisk');
+    && hasScoreDimension(score, 'takeawayValue', 'contentGain', 'informationDensity')
+    && hasScoreDimension(score, 'understandingLeverage', 'structuralImportance')
+    && hasScoreDimension(score, 'attentionROI', 'deepReadNecessity', 'skipRisk');
 }
 
-function hasScoreDimension(score, field, legacyField) {
+function hasScoreDimension(score, field, ...legacyFields) {
   if (!score || typeof score !== 'object') return false;
-  return Number.isFinite(Number(score[field]))
-    || Boolean(legacyField && Number.isFinite(Number(score[legacyField])));
+  if (Number.isFinite(Number(score[field]))) return true;
+  return legacyFields.some((legacyField) => Number.isFinite(Number(score[legacyField])));
 }
 
 function hasActionableItems(items, { min, max }) {

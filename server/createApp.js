@@ -1,7 +1,7 @@
 const crypto = require('node:crypto');
 const express = require('express');
 
-const { PROMPT_VERSION, toLegacyJudgement } = require('./readingStrategy');
+const { PROMPT_VERSION, toCompatibleReadingJudgement, toLegacyJudgement } = require('./readingStrategy');
 const { buildSignalPanel } = require('./signalBuilder');
 
 function createApp({ config, wereadClient, llmClient, logger = console }) {
@@ -115,9 +115,12 @@ function createApp({ config, wereadClient, llmClient, logger = console }) {
         if (event.type === 'delta') {
           writeSse(res, 'delta', { field: event.field, text: event.text });
         } else if (event.type === 'complete') {
+          const readingJudgement = event.readingJudgement
+            ? toCompatibleReadingJudgement(event.readingJudgement)
+            : null;
           completedResult = {
-            readingJudgement: event.readingJudgement || null,
-            judgement: event.judgement || (event.readingJudgement ? toLegacyJudgement(event.readingJudgement) : {})
+            readingJudgement,
+            judgement: event.judgement || (readingJudgement ? toLegacyJudgement(readingJudgement) : {})
           };
           writeSse(res, 'complete', completedResult);
         }

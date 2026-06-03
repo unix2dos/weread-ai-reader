@@ -121,13 +121,13 @@ function createCompleteModelContent(overrides = {}) {
     recommendation: 'deep_read',
     masteryScore: {
       overall: 88,
-      informationDensity: 82,
-      structuralImportance: 90,
-      skipRisk: 75
+      takeawayValue: 82,
+      understandingLeverage: 90,
+      attentionROI: 75
     },
     nextMustKnow: ['核心概念如何支撑后文'],
     reasons: ['热门划线集中在核心定义。'],
-    keyPassages: ['核心概念'],
+    evidenceSnippets: ['核心概念'],
     questionsForAuthor: ['作者为什么先定义这个概念？'],
     readerPerspective: '读者认为这里是基础。',
     readingAdvice: '先精读定义段。',
@@ -191,14 +191,15 @@ test('returns snapshot id and structured signal panel for a valid reading snapsh
     assert.equal(body.agentRequest.headers.Authorization, 'Bearer [hidden]');
     assert.equal(body.agentRequest.body.model, 'deepseek-v4-flash');
     const requestContent = JSON.parse(body.agentRequest.body.messages[1].content);
-    assert.equal(requestContent.promptVersion, 'reading-strategy-v2');
+    assert.equal(requestContent.promptVersion, 'reading-strategy-v3');
     assert.equal(requestContent.outputShape.recommendation, 'must_deep_read | deep_read | quick_read | skip_read');
     assert.equal(requestContent.outputShape.masteryScore.overall, undefined);
-    assert.equal(requestContent.outputShape.masteryScore.contentGain, '0-100 内容增量分');
-    assert.equal(requestContent.outputShape.masteryScore.deepReadNecessity, '0-100 精读必要性分');
-    assert.equal(requestContent.scoreRubric.masteryScoreOverall, '服务端按固定权重从三个维度派生，模型输出的 overall 会被忽略');
-    assert.equal(requestContent.scoreRubric.weights.structuralImportance, 0.4);
-    assert.equal(requestContent.outputShape.questionsForAuthor[0], '1-2 个带着阅读的问题，只给问题，不要给答案');
+    assert.equal(requestContent.outputShape.masteryScore.takeawayValue, '0-100 可带走收获分');
+    assert.equal(requestContent.outputShape.masteryScore.attentionROI, '0-100 投入回报分');
+    assert.equal(requestContent.scoreRubric.masteryScoreOverall, '服务端按固定权重从三个收获价值子分派生，模型输出的 overall 会被忽略');
+    assert.equal(requestContent.scoreRubric.weights.understandingLeverage, 0.35);
+    assert.equal(requestContent.outputShape.questionsForAuthor[0], '1-2 个带着读的问题；至少一个验证核心收获，可有一个追问边界、前提、反证或常见误读；只给问题，不要给答案');
+    assert.equal(requestContent.outputShape.evidenceSnippets[0], '1-3 条可追溯证据片段；必须来自热门划线、划线评论或当前可见正文片段');
     assert.match(body.agentRequest.body.messages[1].content, /这一章讨论了如何判断一章是否值得精读/);
     assert.doesNotMatch(JSON.stringify(body.agentRequest), /test-key|dev-token/);
     assert.equal(body.signalPanel.bestBookmarks[0].markText, '值得精读的关键段落');
@@ -502,7 +503,7 @@ test('llmClient streams reading advice deltas and completes with reading strateg
       bookReviews: [],
       debug: { resolvedBookId: 'book-1' }
     },
-    promptVersion: 'reading-strategy-v2'
+    promptVersion: 'reading-strategy-v3'
   })) {
     events.push(event);
   }
@@ -555,7 +556,7 @@ test('llmClient falls back to the next OpenCode Go model when the primary model 
       bookReviews: [],
       debug: { resolvedBookId: 'book-1' }
     },
-    promptVersion: 'reading-strategy-v2'
+    promptVersion: 'reading-strategy-v3'
   })) {
     events.push(event);
   }
@@ -599,7 +600,7 @@ test('llmClient falls back to the next OpenCode Go model after a transient fetch
       bookReviews: [],
       debug: { resolvedBookId: 'book-1' }
     },
-    promptVersion: 'reading-strategy-v2'
+    promptVersion: 'reading-strategy-v3'
   })) {
     events.push(event);
   }
@@ -635,7 +636,7 @@ test('llmClient rejects invalid streamed JSON without yielding a validated advic
         bookReviews: [],
         debug: { resolvedBookId: 'book-1' }
       },
-      promptVersion: 'reading-strategy-v2'
+      promptVersion: 'reading-strategy-v3'
     })) {
       events.push(event);
     }
@@ -649,13 +650,13 @@ test('llmClient retries once to repair schema-incomplete judgement JSON', async 
     recommendation: 'deep_read',
     masteryScore: {
       overall: 88,
-      informationDensity: 82,
-      structuralImportance: 90,
-      skipRisk: 75
+      takeawayValue: 82,
+      understandingLeverage: 90,
+      attentionROI: 75
     },
     nextMustKnow: ['核心概念如何支撑后文'],
     reasons: ['热门划线集中在核心定义。'],
-    keyPassages: ['核心概念'],
+    evidenceSnippets: ['核心概念'],
     questionsForAuthor: ['作者为什么先定义这个概念？'],
     readingAdvice: '先精读定义段。'
   });
@@ -663,13 +664,13 @@ test('llmClient retries once to repair schema-incomplete judgement JSON', async 
     recommendation: 'deep_read',
     masteryScore: {
       overall: 88,
-      informationDensity: 82,
-      structuralImportance: 90,
-      skipRisk: 75
+      takeawayValue: 82,
+      understandingLeverage: 90,
+      attentionROI: 75
     },
     nextMustKnow: ['核心概念如何支撑后文'],
     reasons: ['热门划线集中在核心定义。'],
-    keyPassages: ['核心概念'],
+    evidenceSnippets: ['核心概念'],
     questionsForAuthor: ['作者为什么先定义这个概念？'],
     readerPerspective: '读者认为这里是基础。',
     readingAdvice: '先精读定义段。'
@@ -700,7 +701,7 @@ test('llmClient retries once to repair schema-incomplete judgement JSON', async 
       bookReviews: [],
       debug: { resolvedBookId: 'book-1' }
     },
-    promptVersion: 'reading-strategy-v2'
+    promptVersion: 'reading-strategy-v3'
   })) {
     events.push(event);
   }
@@ -1016,13 +1017,13 @@ test('streams short judgement events for a stored snapshot', async () => {
             recommendation: 'deep_read',
             masteryScore: {
               overall: 78,
-              informationDensity: 82,
-              structuralImportance: 74,
-              skipRisk: 12
+              takeawayValue: 82,
+              understandingLeverage: 74,
+              attentionROI: 12
             },
             nextMustKnow: ['理解核心论点'],
             reasons: ['热门划线集中在核心论点。'],
-            keyPassages: ['值得精读的关键段落'],
+            evidenceSnippets: ['值得精读的关键段落'],
             questionsForAuthor: ['这一段如何支撑全书主线？'],
             readerPerspective: '读者普遍认为这段重要。',
             readingAdvice: '先精读热门划线附近上下文。'
@@ -1074,13 +1075,13 @@ test('caches reading judgement with compatible legacy judgement', async () => {
             recommendation: 'quick_read',
             masteryScore: {
               overall: 52,
-              informationDensity: 40,
-              structuralImportance: 55,
-              skipRisk: 30
+              takeawayValue: 40,
+              understandingLeverage: 55,
+              attentionROI: 30
             },
             nextMustKnow: ['了解本章过渡作用'],
             reasons: ['证据较少。'],
-            keyPassages: ['过渡段'],
+            evidenceSnippets: ['过渡段'],
             questionsForAuthor: ['这一章为什么放在这里？'],
             readerPerspective: '',
             readingAdvice: '快读即可。'
@@ -1133,13 +1134,13 @@ test('maps reading judgement to legacy judgement when stream omits legacy payloa
             recommendation: 'deep_read',
             masteryScore: {
               overall: 88,
-              informationDensity: 92,
-              structuralImportance: 86,
-              skipRisk: 8
+              takeawayValue: 92,
+              understandingLeverage: 86,
+              attentionROI: 8
             },
             nextMustKnow: ['掌握核心概念'],
             reasons: ['本章集中解释关键框架。'],
-            keyPassages: ['核心框架段落'],
+            evidenceSnippets: ['核心框架段落'],
             questionsForAuthor: ['这个框架如何约束后文？'],
             readerPerspective: '读者认为这里是主线。',
             readingAdvice: '精读核心框架段落。'
@@ -1165,9 +1166,15 @@ test('maps reading judgement to legacy judgement when stream omits legacy payloa
 
     assert.equal(streamCount, 1);
     assert.match(firstText, /"readingJudgement":\{"recommendation":"deep_read"/);
+    assert.match(firstText, /"contentGain":92/);
+    assert.match(firstText, /"structuralImportance":86/);
+    assert.match(firstText, /"deepReadNecessity":8/);
+    assert.match(firstText, /"keyPassages":\["核心框架段落"\]/);
+    assert.match(firstText, /"readingAction":"精读核心框架段落。"/);
     assert.match(firstText, /"judgement":\{"conclusion":"worth_deep_read"/);
     assert.doesNotMatch(firstText, /"judgement":\{"recommendation":"deep_read"/);
     assert.match(secondText, /"readingJudgement":\{"recommendation":"deep_read"/);
+    assert.match(secondText, /"keyPassages":\["核心框架段落"\]/);
     assert.match(secondText, /"judgement":\{"conclusion":"worth_deep_read"/);
     assert.doesNotMatch(secondText, /"judgement":\{"recommendation":"deep_read"/);
   });

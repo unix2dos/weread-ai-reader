@@ -1,4 +1,4 @@
-const PROMPT_VERSION = 'reading-strategy-v2';
+const PROMPT_VERSION = 'reading-strategy-v3';
 
 const RECOMMENDATIONS = new Set(['must_deep_read', 'deep_read', 'quick_read', 'skip_read']);
 const LEGACY_CONCLUSIONS = {
@@ -8,9 +8,9 @@ const LEGACY_CONCLUSIONS = {
   skip_read: 'skip_read'
 };
 const MASTERY_SCORE_WEIGHTS = Object.freeze({
-  contentGain: 0.35,
-  structuralImportance: 0.4,
-  deepReadNecessity: 0.25
+  takeawayValue: 0.45,
+  understandingLeverage: 0.35,
+  attentionROI: 0.2
 });
 const SCORE_THRESHOLDS = Object.freeze({
   mustDeepRead: 90,
@@ -52,20 +52,24 @@ function buildMessages({
     {
       role: 'system',
       content: [
-        '你是微信读书实时跟读助手，只判断当前章节接下来最需要掌握什么。',
+        '你是微信读书实时跟读助手，只判断当前章节读完能带走什么可靠收获。',
         '只基于当前章节正文快照、采集覆盖率、当前章节相关的公开信号和个人信号判断；不要扩展到后续章节正文。',
         '优先使用公开阅读信号，其次参考书籍上下文，仅在存在个人信号时使用个人信号。',
-        '掌握价值分衡量继续读这一章能获得的内容增量、结构位置和精读必要性，不是文学质量、文笔好坏或个人喜好评分。',
-        '掌握价值总分由服务端按固定权重派生：内容增量 35%，结构关键性 40%，精读必要性 25%；你只需要给三个维度分，overall 即使输出也会被忽略。',
+        '收获价值分衡量读完这一章能带走的可靠收获、理解杠杆和投入回报，不是文学质量、文笔好坏、热度或个人喜好评分。',
+        '收获价值总分由服务端按固定权重派生：可带走收获 45%，理解杠杆 35%，投入回报 20%；你只需要给三个维度分，overall 即使输出也会被忽略。',
+        '热度不能直接抬高收获价值：热门划线只说明读者关注过；金句、共鸣、重复观点和泛泛赞同不自动构成高收获。',
+        '只有清晰概念、方法、重要区分、因果链、反证、适用边界或后文枢纽，才应提高收获价值。',
         '严格使用精读门槛：90-100 必须精读，80-89 值得精读，65-79 快读为主，0-64 可跳读或只扫结论。',
         'recommendation 只能是 must_deep_read、deep_read、quick_read 或 skip_read。',
         '当 recommendation 是 quick_read（可快读）时，readingAdvice 可以写“局部精读”，但不能写成“必须精读”；“必须精读”只用于 must_deep_read。',
-        'questionsForAuthor 是给读者带着阅读的追问问题；追问问题只给问题，不要给答案，不要模拟作者对话。',
-        '按二八原则输出：首屏只需要结论、掌握价值总分、最多三个掌握点、最多两个追问问题和一句明确阅读动作。',
-        'reasons、keyPassages、readerPerspective 是折叠证据层，不要写成长解释。',
+        'questionsForAuthor 是给读者带着读的问题；带着读的问题只给问题，不要给答案，不要模拟作者对话。',
+        'questionsForAuthor 至少一个问题要验证核心收获；第二个问题可追问边界、前提、反证或常见误读。',
+        '按二八原则输出：首屏只需要结论、收获价值总分、三个子分、最多三个收获点、最多两个带着读的问题和一句明确阅读动作。',
+        'reasons、evidenceSnippets、readerPerspective 是折叠证据层，不要写成长解释。',
+        '证据片段必须来自输入证据：热门划线、划线评论或当前章节正文快照；不要自由编造原文。',
         '所有 JSON 字段都必须有实际内容；没有评论信号时 readerPerspective 要说明“暂无足够公开评论信号”，不能留空。',
         '必须只输出 JSON，不要输出 Markdown、解释文字或代码块。',
-        'JSON 字段必须包含 recommendation, masteryScore, nextMustKnow, reasons, keyPassages, questionsForAuthor, readerPerspective, readingAdvice。'
+        'JSON 字段必须包含 recommendation, masteryScore, nextMustKnow, reasons, evidenceSnippets, questionsForAuthor, readerPerspective, readingAdvice。'
       ].join('\n')
     },
     {
@@ -84,7 +88,7 @@ function buildStrategyInput({
 
   return {
     promptVersion: PROMPT_VERSION,
-    task: '判断当前章节接下来最需要掌握什么，并给出精读、快读或跳读建议。',
+    task: '判断当前章节读完能带走什么可靠收获，并给出精读、快读或跳读建议。',
     chapter: {
       bookId: signalPanel.debug?.resolvedBookId || snapshot.bookId,
       rawBookId: snapshot.bookId,
@@ -98,7 +102,7 @@ function buildStrategyInput({
     },
     signals,
     scoreRubric: {
-      masteryScoreOverall: '服务端按固定权重从三个维度派生，模型输出的 overall 会被忽略',
+      masteryScoreOverall: '服务端按固定权重从三个收获价值子分派生，模型输出的 overall 会被忽略',
       weights: MASTERY_SCORE_WEIGHTS,
       thresholds: {
         mustDeepRead: '90-100 必须精读，本章是全书理解枢纽',
@@ -110,14 +114,14 @@ function buildStrategyInput({
     outputShape: {
       recommendation: 'must_deep_read | deep_read | quick_read | skip_read',
       masteryScore: {
-        contentGain: '0-100 内容增量分',
-        structuralImportance: '0-100 结构关键性分',
-        deepReadNecessity: '0-100 精读必要性分'
+        takeawayValue: '0-100 可带走收获分',
+        understandingLeverage: '0-100 理解杠杆分',
+        attentionROI: '0-100 投入回报分'
       },
-      nextMustKnow: ['1-3 条接下来最需要掌握的概念、区分或结构'],
+      nextMustKnow: ['1-3 条读完本章能带走的概念、方法、判断框架、关键事实或可迁移理解'],
       reasons: ['1-2 条只基于当前章节与信号的判断依据'],
-      keyPassages: ['1-3 条热门划线或已采集正文片段；公开划线不足时使用当前可见正文片段'],
-      questionsForAuthor: ['1-2 个带着阅读的问题，只给问题，不要给答案'],
+      evidenceSnippets: ['1-3 条可追溯证据片段；必须来自热门划线、划线评论或当前可见正文片段'],
+      questionsForAuthor: ['1-2 个带着读的问题；至少一个验证核心收获，可有一个追问边界、前提、反证或常见误读；只给问题，不要给答案'],
       readerPerspective: '评论中的共识、争议、误读或补充；没有评论信号时说明暂无足够公开评论信号',
       readingAdvice: '一句明确阅读动作，60字内，直接说明精读、快读或跳读怎么做'
     }
@@ -198,6 +202,30 @@ function buildCaptureInput(snapshot, signalPanel) {
   };
 }
 
+function buildEvidenceWarning({ snapshot, signalPanel }) {
+  const capture = buildCaptureInput(snapshot, signalPanel);
+  const publicSignals = signalPanel.publicSignals || {
+    bestBookmarks: signalPanel.bestBookmarks || [],
+    bookmarkReviews: signalPanel.bookmarkReviews || [],
+    bookReviews: signalPanel.bookReviews || []
+  };
+  const bestBookmarkCount = (publicSignals.bestBookmarks || []).length;
+  const commentCount = (publicSignals.bookmarkReviews || [])
+    .reduce((sum, review) => sum + (review.comments || []).length, 0);
+  const warnings = signalPanel.debug?.warnings || [];
+  const reasons = [];
+
+  if (capture.status === 'partial') reasons.push('正文覆盖偏低');
+  if (!signalPanel.chapter?.chapterUid) reasons.push('章节定位不完整');
+  if (bestBookmarkCount < 3) reasons.push('本章热门划线较少');
+  if (commentCount < 2) reasons.push('划线评论较少');
+  if (warnings.length > 0) reasons.push('Skill 信号有告警');
+
+  return reasons.length
+    ? `依据偏弱：${reasons.join('，')}，建议只把本判断当作读前预判。`
+    : '';
+}
+
 function parseReadingJudgement(raw) {
   const parsed = parseJsonObject(raw);
   parseRecommendation(parsed.recommendation || parsed.conclusion);
@@ -208,7 +236,7 @@ function parseReadingJudgement(raw) {
     masteryScore,
     nextMustKnow: normalizeStringArray(parsed.nextMustKnow, 3),
     reasons: normalizeStringArray(parsed.reasons, 2),
-    keyPassages: normalizeStringArray(parsed.keyPassages, 3),
+    evidenceSnippets: normalizeStringArray(parsed.evidenceSnippets || parsed.keyPassages, 3),
     questionsForAuthor: normalizeStringArray(parsed.questionsForAuthor, 2),
     readerPerspective: normalizeString(parsed.readerPerspective),
     readingAdvice: normalizeReadingAdviceForRecommendation(normalizeString(parsed.readingAdvice), recommendation)
@@ -224,9 +252,32 @@ function toLegacyJudgement(judgement) {
   return {
     conclusion: LEGACY_CONCLUSIONS[recommendation],
     reasons: normalizeStringArray(judgement.reasons, 2),
-    keyPassages: normalizeStringArray(judgement.keyPassages, 3),
+    keyPassages: normalizeStringArray(judgement.evidenceSnippets || judgement.keyPassages, 3),
     readerPerspective: normalizeString(judgement.readerPerspective),
     readingAction: normalizeString(judgement.readingAdvice)
+  };
+}
+
+function toCompatibleReadingJudgement(judgement) {
+  const masteryScore = judgement.masteryScore || {};
+  const evidenceSnippets = normalizeStringArray(judgement.evidenceSnippets || judgement.keyPassages, 3);
+  const readingAdvice = normalizeString(judgement.readingAdvice || judgement.readingAction);
+  const recommendation = normalizeRecommendation(judgement.recommendation || judgement.conclusion);
+
+  return {
+    ...judgement,
+    recommendation,
+    masteryScore: {
+      ...masteryScore,
+      contentGain: readScoreDimension(masteryScore, 'takeawayValue', 'contentGain', 'informationDensity'),
+      structuralImportance: readScoreDimension(masteryScore, 'understandingLeverage', 'structuralImportance'),
+      deepReadNecessity: readScoreDimension(masteryScore, 'attentionROI', 'deepReadNecessity', 'skipRisk')
+    },
+    evidenceSnippets,
+    keyPassages: evidenceSnippets,
+    readingAdvice,
+    readingAction: readingAdvice,
+    conclusion: LEGACY_CONCLUSIONS[recommendation]
   };
 }
 
@@ -280,9 +331,9 @@ function normalizeRecommendationForScore(overallScore) {
 function normalizeMasteryScore(value) {
   const score = value && typeof value === 'object' ? value : {};
   const dimensionScores = {
-    contentGain: clampScore(readScoreDimension(score, 'contentGain', 'informationDensity')),
-    structuralImportance: clampScore(score.structuralImportance),
-    deepReadNecessity: clampScore(readScoreDimension(score, 'deepReadNecessity', 'skipRisk'))
+    takeawayValue: clampScore(readScoreDimension(score, 'takeawayValue', 'contentGain', 'informationDensity')),
+    understandingLeverage: clampScore(readScoreDimension(score, 'understandingLeverage', 'structuralImportance')),
+    attentionROI: clampScore(readScoreDimension(score, 'attentionROI', 'deepReadNecessity', 'skipRisk'))
   };
 
   return {
@@ -293,41 +344,44 @@ function normalizeMasteryScore(value) {
 
 function calculateMasteryScore(score) {
   const dimensionScores = {
-    contentGain: readScoreDimension(score, 'contentGain', 'informationDensity'),
-    structuralImportance: score.structuralImportance,
-    deepReadNecessity: readScoreDimension(score, 'deepReadNecessity', 'skipRisk')
+    takeawayValue: readScoreDimension(score, 'takeawayValue', 'contentGain', 'informationDensity'),
+    understandingLeverage: readScoreDimension(score, 'understandingLeverage', 'structuralImportance'),
+    attentionROI: readScoreDimension(score, 'attentionROI', 'deepReadNecessity', 'skipRisk')
   };
 
   return clampScore(
-    (Number(dimensionScores.contentGain) * MASTERY_SCORE_WEIGHTS.contentGain)
-    + (Number(dimensionScores.structuralImportance) * MASTERY_SCORE_WEIGHTS.structuralImportance)
-    + (Number(dimensionScores.deepReadNecessity) * MASTERY_SCORE_WEIGHTS.deepReadNecessity)
+    (Number(dimensionScores.takeawayValue) * MASTERY_SCORE_WEIGHTS.takeawayValue)
+    + (Number(dimensionScores.understandingLeverage) * MASTERY_SCORE_WEIGHTS.understandingLeverage)
+    + (Number(dimensionScores.attentionROI) * MASTERY_SCORE_WEIGHTS.attentionROI)
   );
 }
 
 function assertCompleteJudgement(parsed, judgement) {
-  assertScoreField(parsed.masteryScore, 'contentGain', 'informationDensity');
-  assertScoreField(parsed.masteryScore, 'structuralImportance');
-  assertScoreField(parsed.masteryScore, 'deepReadNecessity', 'skipRisk');
+  assertScoreField(parsed.masteryScore, 'takeawayValue', 'contentGain', 'informationDensity');
+  assertScoreField(parsed.masteryScore, 'understandingLeverage', 'structuralImportance');
+  assertScoreField(parsed.masteryScore, 'attentionROI', 'deepReadNecessity', 'skipRisk');
 
   assertNonEmptyArray(judgement.nextMustKnow, 'nextMustKnow');
   assertNonEmptyArray(judgement.reasons, 'reasons');
-  assertNonEmptyArray(judgement.keyPassages, 'keyPassages');
+  assertNonEmptyArray(judgement.evidenceSnippets, 'evidenceSnippets');
   assertNonEmptyArray(judgement.questionsForAuthor, 'questionsForAuthor');
   assertNonEmptyString(judgement.readerPerspective, 'readerPerspective');
   assertNonEmptyString(judgement.readingAdvice, 'readingAdvice');
 }
 
-function assertScoreField(score, field, legacyField) {
-  if (!score || typeof score !== 'object' || !hasFiniteScore(readScoreDimension(score, field, legacyField))) {
+function assertScoreField(score, field, ...legacyFields) {
+  if (!score || typeof score !== 'object' || !hasFiniteScore(readScoreDimension(score, field, ...legacyFields))) {
     throw new Error(`Missing reading judgement field: masteryScore.${field}`);
   }
 }
 
-function readScoreDimension(score, field, legacyField) {
+function readScoreDimension(score, field, ...legacyFields) {
   if (!score || typeof score !== 'object') return undefined;
   if (hasFiniteScore(score[field])) return score[field];
-  return legacyField ? score[legacyField] : undefined;
+  for (const legacyField of legacyFields) {
+    if (hasFiniteScore(score[legacyField])) return score[legacyField];
+  }
+  return undefined;
 }
 
 function normalizeReadingAdviceForRecommendation(readingAdvice, recommendation) {
@@ -437,10 +491,12 @@ module.exports = {
   MASTERY_SCORE_WEIGHTS,
   PROMPT_VERSION,
   buildCaptureInput,
+  buildEvidenceWarning,
   buildMessages,
   buildRequestBody,
   buildStrategyInput,
   calculateMasteryScore,
   parseReadingJudgement,
+  toCompatibleReadingJudgement,
   toLegacyJudgement
 };
