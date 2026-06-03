@@ -278,7 +278,7 @@ function badgeTextForSummaryState(summaryState) {
   const status = summaryState?.status || {};
   const text = status.text || '';
   if (status.type === 'error' || text.includes('失败') || text.includes('错误')) return '!';
-  if (text.includes('正在发送') || text.includes('正在生成') || text.includes('流已连接')) return '…';
+  if (text.includes('正在发送') || text.includes('正在生成')) return '…';
   if (text.includes('判断完成')) return 'OK';
   return '';
 }

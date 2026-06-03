@@ -360,26 +360,9 @@
       <section class="summary-section">
         <div class="summary-section-title">热门划线</div>
         <div class="summary-highlight-list">
-          ${bestBookmarks.slice(0, 3).map((item) => renderHighlightCard(item, reviewsByRange.get(item.range), 1)).join('')}
-        </div>
-        ${renderMoreHighlightEvidence(bestBookmarks, bookmarkReviews)}
-      </section>
-    `;
-  }
-
-  function renderMoreHighlightEvidence(bestBookmarks, bookmarkReviews) {
-    const reviewsByRange = buildReviewsByRange(bookmarkReviews);
-    const hasHiddenBookmarks = bestBookmarks.length > 3;
-    const hasHiddenComments = (bookmarkReviews || []).some((review) => (review.comments || []).length > 1);
-    if (!hasHiddenBookmarks && !hasHiddenComments) return '';
-
-    return `
-      <details class="summary-more-signals">
-        <summary>展开更多阅读信号</summary>
-        <div class="summary-more-signals-body">
           ${bestBookmarks.slice(0, 5).map((item) => renderHighlightCard(item, reviewsByRange.get(item.range), 3)).join('')}
         </div>
-      </details>
+      </section>
     `;
   }
 

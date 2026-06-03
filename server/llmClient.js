@@ -204,8 +204,10 @@ function buildRepairRequestBody({
           '必须补齐所有必填字段，尤其是 readerPerspective；如果评论信号不足，readerPerspective 写“暂无足够公开评论信号，暂以正文和划线信号判断”。',
           'masteryScore 只需要补齐 takeawayValue、understandingLeverage、attentionROI；overall 会由服务端派生。',
           'questionsForAuthor 只保留带着读的问题，不要给答案。',
+          'nextMustKnow、questionsForAuthor 和 readingAdvice 必须过白话检查：短句，一句一事，术语先说人话。',
+          '问题只问一个卡点，不要把多个“如何/那么/是否”串成长套句。',
           '按二八原则修复：nextMustKnow 最多 3 条，reasons 最多 2 条，evidenceSnippets 最多 3 条，questionsForAuthor 最多 2 个。',
-          'readingAdvice 必须是一句明确阅读动作，60字内。',
+          'readingAdvice 必须是一句明确阅读动作，45字内。',
           '必须只输出完整 JSON 对象。'
         ].join('\n')
       },

@@ -297,7 +297,7 @@ test('summary judgement does not render empty text sections', () => {
   assert.doesNotMatch(summaryJs, /<div class="summary-section-title">读者视角<\/div>\s*<div class="summary-analysis-content">\$\{escapeHtml\(judgement\.readerPerspective \|\| ''\)\}<\/div>/);
 });
 
-test('reading signals and book reviews are separate foldable frames', () => {
+test('reading signals default to the expanded signal set without duplicate more panel', () => {
   const renderSignalsSource = summaryJs.match(/function renderReadingSignals\(state\) \{([\s\S]*?)\n  function renderBookReviewPanel/);
   assert.ok(renderSignalsSource, 'renderReadingSignals source should be inspectable');
   const signalsSource = renderSignalsSource[1];
@@ -306,8 +306,12 @@ test('reading signals and book reviews are separate foldable frames', () => {
   assert.match(summaryJs, /<details class="summary-signals" open>/);
   assert.match(summaryJs, /<summary>阅读信号<\/summary>/);
   assert.match(summaryJs, /renderHighlightEvidence\(bestBookmarks, bookmarkReviews\)/);
-  assert.match(summaryJs, /bestBookmarks\.slice\(0, 3\)/);
-  assert.match(summaryJs, /renderMoreHighlightEvidence\(bestBookmarks, bookmarkReviews\)/);
+  assert.match(summaryJs, /bestBookmarks\.slice\(0, 5\)/);
+  assert.match(summaryJs, /renderHighlightCard\(item, reviewsByRange\.get\(item\.range\), 3\)/);
+  assert.doesNotMatch(summaryJs, /renderMoreHighlightEvidence/);
+  assert.doesNotMatch(summaryJs, /展开更多阅读信号/);
+  assert.doesNotMatch(summaryJs, /summary-more-signals/);
+  assert.doesNotMatch(summaryCss, /summary-more-signals/);
   assert.match(summaryJs, /summary-highlight-card/);
   assert.match(summaryJs, /summary-highlight-comment/);
   assert.doesNotMatch(signalsSource, /renderBookReviews\(bookReviews\)/);
@@ -387,6 +391,9 @@ test('upload and judgement progress status keeps the chapter title visible', () 
   assert.match(contentJs, /formatChapterProgress\(snapshot\.chapterTitle, '正在发送阅读快照\.\.\.'\)/);
   assert.match(contentJs, /formatChapterProgress\(snapshot\.chapterTitle, `已发送 \$\{formatCaptureLength\(snapshot\.chapterText\.length, snapshot\)\}，正在生成阅读判断\.\.\.`\)/);
   assert.match(contentJs, /updateJudgementLoading\(formatChapterProgress\(currentChapterTitle, '正在生成阅读判断\.\.\.'\)\)/);
+  assert.match(contentJs, /message\.event === 'start'[\s\S]*formatChapterProgress\(currentChapterTitle, '正在生成阅读判断\.\.\.'\)/);
+  assert.doesNotMatch(contentJs, /流已连接/);
+  assert.doesNotMatch(backgroundJs, /流已连接/);
 });
 
 test('page UI no longer exposes panel opacity, pin, or analyze controls', () => {

@@ -64,6 +64,10 @@ function buildMessages({
         '当 recommendation 是 quick_read（可快读）时，readingAdvice 可以写“局部精读”，但不能写成“必须精读”；“必须精读”只用于 must_deep_read。',
         'questionsForAuthor 是给读者带着读的问题；带着读的问题只给问题，不要给答案，不要模拟作者对话。',
         'questionsForAuthor 至少一个问题要验证核心收获；第二个问题可追问边界、前提、反证或常见误读。',
+        '输出文案必须过白话检查：读出声不像给朋友说话，就重写。',
+        '术语先翻成人话，再顺带保留术语名；不要让佛教、文学或哲学词裸奔。',
+        'nextMustKnow 每条只说一个点，用短句，少用冒号，少堆“核心、方法、精神、路线、边界”等抽象词。',
+        'questionsForAuthor 每个问题只问一个卡点，不要把多个“如何/那么/是否”串成长套句。',
         '按二八原则输出：首屏只需要结论、收获价值总分、三个子分、最多三个收获点、最多两个带着读的问题和一句明确阅读动作。',
         'reasons、evidenceSnippets、readerPerspective 是折叠证据层，不要写成长解释。',
         '证据片段必须来自输入证据：热门划线、划线评论或当前章节正文快照；不要自由编造原文。',
@@ -101,6 +105,9 @@ function buildStrategyInput({
       chapterText: snapshot.chapterText || ''
     },
     signals,
+    styleGuide: {
+      plainLanguage: buildPlainLanguageGuide()
+    },
     scoreRubric: {
       masteryScoreOverall: '服务端按固定权重从三个收获价值子分派生，模型输出的 overall 会被忽略',
       weights: MASTERY_SCORE_WEIGHTS,
@@ -118,12 +125,35 @@ function buildStrategyInput({
         understandingLeverage: '0-100 理解杠杆分',
         attentionROI: '0-100 投入回报分'
       },
-      nextMustKnow: ['1-3 条读完本章能带走的概念、方法、判断框架、关键事实或可迁移理解'],
+      nextMustKnow: ['1-3 条；每条用一句白话说清读者能看懂什么；专业词先翻成人话，再顺带点名'],
       reasons: ['1-2 条只基于当前章节与信号的判断依据'],
       evidenceSnippets: ['1-3 条可追溯证据片段；必须来自热门划线、划线评论或当前可见正文片段'],
-      questionsForAuthor: ['1-2 个带着读的问题；至少一个验证核心收获，可有一个追问边界、前提、反证或常见误读；只给问题，不要给答案'],
+      questionsForAuthor: ['1-2 个带着读的问题；每个问题只问一个卡点，短句，不给答案'],
       readerPerspective: '评论中的共识、争议、误读或补充；没有评论信号时说明暂无足够公开评论信号',
-      readingAdvice: '一句明确阅读动作，60字内，直接说明精读、快读或跳读怎么做'
+      readingAdvice: '一句明确阅读动作，45字内，用“先读/跳过/只看/回看”等直接动词'
+    }
+  };
+}
+
+function buildPlainLanguageGuide() {
+  return {
+    goal: '让一个聪明的 12 岁读者能复述，不绕口。',
+    rules: [
+      '口语检查：读出声，不像给朋友说话就重写。',
+      '术语先落地：先说它是什么意思，再顺带保留术语名。',
+      '短词短句：能用“看、读、问、找”就不用“阐释、确保、边界”。',
+      '一句一事：每条收获只说一个点，每个问题只问一个卡点。',
+      '具体：说读者该看懂什么，不堆抽象名词。'
+    ],
+    examples: {
+      avoid: [
+        '“善护念”是一切修养方法的核心：即好好照应自己的起心动念。',
+        '文中区分了“罗汉”的自了与“菩萨”的度众，但“善护念”这一方法如何确保修行者不落入只求自我解脱的“罗汉”境界，而能践行“菩萨道”？'
+      ],
+      prefer: [
+        '这一章先讲“善护念”：说白了，就是看住自己的念头。',
+        '“善护念”只是管好自己，还是也包括帮别人？'
+      ]
     }
   };
 }

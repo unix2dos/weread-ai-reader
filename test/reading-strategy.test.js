@@ -86,6 +86,12 @@ test('buildStrategyInput includes harvest-value score and reading-question outpu
     publicSignals: signalPanel.publicSignals,
     personalSignals: signalPanel.personalSignals
   });
+  assert.equal(input.styleGuide.plainLanguage.goal, '让一个聪明的 12 岁读者能复述，不绕口。');
+  assert.match(input.styleGuide.plainLanguage.rules.join('\n'), /口语检查/);
+  assert.match(input.styleGuide.plainLanguage.rules.join('\n'), /术语先落地/);
+  assert.match(input.styleGuide.plainLanguage.rules.join('\n'), /一句一事/);
+  assert.match(input.styleGuide.plainLanguage.examples.avoid.join('\n'), /善护念.*核心/);
+  assert.match(input.styleGuide.plainLanguage.examples.prefer.join('\n'), /说白了/);
   assert.equal(input.outputShape.recommendation, 'must_deep_read | deep_read | quick_read | skip_read');
   assert.equal(input.scoreRubric.masteryScoreOverall, '服务端按固定权重从三个收获价值子分派生，模型输出的 overall 会被忽略');
   assert.deepEqual(input.scoreRubric.weights, MASTERY_SCORE_WEIGHTS);
@@ -104,12 +110,12 @@ test('buildStrategyInput includes harvest-value score and reading-question outpu
   assert.equal(input.outputShape.masteryScore.deepReadNecessity, undefined);
   assert.equal(input.outputShape.masteryScore.informationDensity, undefined);
   assert.equal(input.outputShape.masteryScore.skipRisk, undefined);
-  assert.equal(input.outputShape.nextMustKnow[0], '1-3 条读完本章能带走的概念、方法、判断框架、关键事实或可迁移理解');
+  assert.equal(input.outputShape.nextMustKnow[0], '1-3 条；每条用一句白话说清读者能看懂什么；专业词先翻成人话，再顺带点名');
   assert.equal(input.outputShape.reasons[0], '1-2 条只基于当前章节与信号的判断依据');
   assert.equal(input.outputShape.evidenceSnippets[0], '1-3 条可追溯证据片段；必须来自热门划线、划线评论或当前可见正文片段');
   assert.equal(input.outputShape.keyPassages, undefined);
-  assert.equal(input.outputShape.questionsForAuthor[0], '1-2 个带着读的问题；至少一个验证核心收获，可有一个追问边界、前提、反证或常见误读；只给问题，不要给答案');
-  assert.equal(input.outputShape.readingAdvice, '一句明确阅读动作，60字内，直接说明精读、快读或跳读怎么做');
+  assert.equal(input.outputShape.questionsForAuthor[0], '1-2 个带着读的问题；每个问题只问一个卡点，短句，不给答案');
+  assert.equal(input.outputShape.readingAdvice, '一句明确阅读动作，45字内，用“先读/跳过/只看/回看”等直接动词');
 });
 
 test('buildCaptureInput reports capture coverage for partial chapter text', () => {
@@ -180,6 +186,10 @@ test('buildMessages includes required system prompt constraints', () => {
   assert.match(systemPrompt, /带着读的问题只给问题/);
   assert.match(systemPrompt, /不要给答案/);
   assert.match(systemPrompt, /不要模拟作者对话/);
+  assert.match(systemPrompt, /白话检查/);
+  assert.match(systemPrompt, /不像给朋友说话/);
+  assert.match(systemPrompt, /术语先翻成人话/);
+  assert.match(systemPrompt, /每个问题只问一个卡点/);
   assert.match(systemPrompt, /二八原则/);
   assert.match(systemPrompt, /收获价值总分由服务端按固定权重派生/);
   assert.match(systemPrompt, /90-100/);

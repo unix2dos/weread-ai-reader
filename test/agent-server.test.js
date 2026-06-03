@@ -198,7 +198,10 @@ test('returns snapshot id and structured signal panel for a valid reading snapsh
     assert.equal(requestContent.outputShape.masteryScore.attentionROI, '0-100 投入回报分');
     assert.equal(requestContent.scoreRubric.masteryScoreOverall, '服务端按固定权重从三个收获价值子分派生，模型输出的 overall 会被忽略');
     assert.equal(requestContent.scoreRubric.weights.understandingLeverage, 0.35);
-    assert.equal(requestContent.outputShape.questionsForAuthor[0], '1-2 个带着读的问题；至少一个验证核心收获，可有一个追问边界、前提、反证或常见误读；只给问题，不要给答案');
+    assert.equal(requestContent.styleGuide.plainLanguage.goal, '让一个聪明的 12 岁读者能复述，不绕口。');
+    assert.match(requestContent.styleGuide.plainLanguage.rules.join('\n'), /不像给朋友说话/);
+    assert.match(requestContent.styleGuide.plainLanguage.examples.prefer.join('\n'), /说白了/);
+    assert.equal(requestContent.outputShape.questionsForAuthor[0], '1-2 个带着读的问题；每个问题只问一个卡点，短句，不给答案');
     assert.equal(requestContent.outputShape.evidenceSnippets[0], '1-3 条可追溯证据片段；必须来自热门划线、划线评论或当前可见正文片段');
     assert.match(body.agentRequest.body.messages[1].content, /这一章讨论了如何判断一章是否值得精读/);
     assert.doesNotMatch(JSON.stringify(body.agentRequest), /test-key|dev-token/);
